@@ -82,7 +82,6 @@ jobs:
         file: ./Dockerfile
         push: true
         tags: ${{ secrets.DOCKERHUB_USERNAME }}/saas-backend:latest
-        target: backend # Assuming multistage build for prod
 
     # Note: In a real-world scenario, you would then trigger 
     # a deployment webhook (e.g., Render, Railway, AWS ECS, DigitalOcean App Platform)
