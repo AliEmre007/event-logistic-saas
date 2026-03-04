@@ -36,3 +36,12 @@ export const updateInvoiceStatus = async (req: Request, res: Response, next: Nex
         next(error);
     }
 };
+
+export const deleteInvoice = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        await invoiceService.deleteInvoice(req.params.id);
+        res.status(200).json({ status: 'success', message: 'Invoice deleted' });
+    } catch (error) {
+        next(error);
+    }
+};

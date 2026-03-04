@@ -59,3 +59,13 @@ export const updateInvoiceStatus = async (id: string, data: UpdateInvoiceStatusI
         },
     });
 };
+
+export const deleteInvoice = async (id: string) => {
+    const invoice = await prisma.invoice.findUnique({ where: { id } });
+    if (!invoice) throw new NotFoundError('Invoice not found');
+    if (invoice.status === 'PAID') {
+        throw new BadRequestError('Cannot delete a paid invoice');
+    }
+    await prisma.invoice.delete({ where: { id } });
+};
+

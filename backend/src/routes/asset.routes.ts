@@ -8,13 +8,15 @@ const router = Router();
 
 router.use(authenticate);
 
-// View assets (Performers need to see assets assigned to gigs)
+// View assets (all authenticated users)
 router.get('/', assetController.getAllAssets);
 router.get('/:id', assetController.getAssetById);
 
 // Manage assets (Admin only)
 router.use(authorizeRole('ADMIN'));
 router.post('/', validateRequest(createAssetSchema), assetController.createAsset);
+router.put('/:id', assetController.updateAsset);
 router.patch('/:id/state', validateRequest(updateAssetStateSchema), assetController.updateAssetState);
+router.delete('/:id', assetController.deleteAsset);
 
 export default router;

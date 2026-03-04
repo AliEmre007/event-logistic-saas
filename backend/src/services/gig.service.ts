@@ -123,3 +123,49 @@ export const assignAsset = async (gigId: string, data: AssignAssetInput) => {
         throw error;
     }
 };
+
+export const updateGig = async (id: string, data: Partial<CreateGigInput> & { status?: string }) => {
+    await getGigById(id); // Ensure exists
+    const updateData: any = {};
+    if (data.title) updateData.title = data.title;
+    if (data.description !== undefined) updateData.description = data.description;
+    if (data.startTime) updateData.startTime = new Date(data.startTime);
+    if (data.endTime) updateData.endTime = new Date(data.endTime);
+    if (data.clientId) updateData.clientId = data.clientId;
+    if (data.locationId) updateData.locationId = data.locationId;
+    if (data.status) updateData.status = data.status;
+
+    return await prisma.gig.update({
+        where: { id },
+        data: updateData,
+        include: {
+            client: true,
+            location: true,
+            assignments: { include: { performer: { include: { user: true } } } },
+            assets: { include: { asset: true } },
+        },
+    });
+};
+
+export const deleteGig = async (id: string) => {
+    await getGigById(id); // Ensure exists
+    // Cascade deletes assignments and assets via schema onDelete: Cascade
+    await prisma.gig.delete({ where: { id } });
+};
+
+export const removePerformerAssignment = async (gigId: string, assignmentId: string) => {
+    const assignment = await prisma.gigAssignment.findFirst({
+        where: { id: assignmentId, gigId },
+    });
+    if (!assignment) throw new NotFoundError('Assignment not found');
+    await prisma.gigAssignment.delete({ where: { id: assignmentId } });
+};
+
+export const removeAssetAssignment = async (gigId: string, gigAssetId: string) => {
+    const gigAsset = await prisma.gigAsset.findFirst({
+        where: { id: gigAssetId, gigId },
+    });
+    if (!gigAsset) throw new NotFoundError('Asset assignment not found');
+    await prisma.gigAsset.delete({ where: { id: gigAssetId } });
+};
+

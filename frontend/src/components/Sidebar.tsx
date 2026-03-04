@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { useAuthStore } from "@/store/authStore";
-import { Calendar, Package, FileText, LogOut } from "lucide-react";
+import { Calendar, Package, FileText, LogOut, Users, MapPin, Mic2 } from "lucide-react";
+
 import { Button } from "./ui/button";
 import { useRouter } from "next/navigation";
 
@@ -28,12 +29,23 @@ export function Sidebar() {
                         <Package className="h-4 w-4" />
                         Inventory & Assets
                     </Link>
-                    {user?.role === 'ADMIN' && (
-                        <Link href="/dashboard/invoices" className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary">
-                            <FileText className="h-4 w-4" />
-                            Invoicing
-                        </Link>
-                    )}
+                    <Link href="/dashboard/clients" className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary">
+                        <Users className="h-4 w-4" />
+                        Clients
+                    </Link>
+                    <Link href="/dashboard/locations" className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary">
+                        <MapPin className="h-4 w-4" />
+                        Locations
+                    </Link>
+                    <Link href="/dashboard/performers" className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary">
+                        <Mic2 className="h-4 w-4" />
+                        Performers
+                    </Link>
+                    <Link href="/dashboard/invoices" className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary">
+                        <FileText className="h-4 w-4" />
+                        Invoicing
+                    </Link>
+
                 </nav>
             </div>
             <div className="border-t p-4">

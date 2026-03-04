@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar, ChevronLeft, ChevronRight, Plus, Clock, MapPin, Users, Package, X, UserPlus, BoxIcon } from "lucide-react";
+import { Calendar, ChevronLeft, ChevronRight, Plus, Clock, MapPin, Users, Package, X, UserPlus, BoxIcon, Trash2, Edit2, MinusCircle, AlertTriangle } from "lucide-react";
 
 const API = "http://localhost:5000/api";
 
@@ -29,6 +29,7 @@ export default function DispatchBoard() {
     const [showCreateGig, setShowCreateGig] = useState(false);
     const [showCreateClient, setShowCreateClient] = useState(false);
     const [showCreateLocation, setShowCreateLocation] = useState(false);
+    const [showEditGig, setShowEditGig] = useState(false);
     const [error, setError] = useState("");
 
     // Create Gig form state
@@ -43,6 +44,19 @@ export default function DispatchBoard() {
     const [locationForm, setLocationForm] = useState({ name: "", address: "" });
 
     const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+
+    const openEditGig = (gig: any) => {
+        setGigForm({
+            title: gig.title,
+            description: gig.description || "",
+            date: format(new Date(gig.startTime), "yyyy-MM-dd"),
+            startTime: format(new Date(gig.startTime), "HH:mm"),
+            endTime: format(new Date(gig.endTime), "HH:mm"),
+            clientId: gig.clientId,
+            locationId: gig.locationId,
+        });
+        setShowEditGig(true);
+    };
 
     const fetchAll = useCallback(async () => {
         if (!token) return;
@@ -157,7 +171,79 @@ export default function DispatchBoard() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.message || "Failed to assign asset");
             await fetchAll();
+            // Refresh selected gig
+            const updatedGig = gigs.find((g) => g.id === gigId);
+            if (updatedGig) setSelectedGig(updatedGig);
         } catch (err: any) { setError(err.message); }
+    };
+
+    // --- Update Gig ---
+    const handleUpdateGig = async () => {
+        if (!selectedGig) return;
+        setError("");
+        try {
+            const payload = {
+                title: gigForm.title,
+                description: gigForm.description,
+                startTime: new Date(`${gigForm.date}T${gigForm.startTime}`).toISOString(),
+                endTime: new Date(`${gigForm.date}T${gigForm.endTime}`).toISOString(),
+                clientId: gigForm.clientId,
+                locationId: gigForm.locationId,
+            };
+            const res = await fetch(`${API}/gigs/${selectedGig.id}`, {
+                method: "PUT", headers, body: JSON.stringify(payload),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.message || "Failed to update gig");
+            setShowEditGig(false);
+            await fetchAll();
+            setSelectedGig(data.data);
+        } catch (err: any) { setError(err.message); }
+    };
+
+    // --- Delete Gig ---
+    const handleDeleteGig = async () => {
+        if (!selectedGig || !confirm("Are you sure you want to delete this gig? This will also remove all assignments.")) return;
+        setError("");
+        try {
+            const res = await fetch(`${API}/gigs/${selectedGig.id}`, {
+                method: "DELETE", headers,
+            });
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.message || "Failed to delete gig");
+            }
+            setSelectedGig(null);
+            await fetchAll();
+        } catch (err: any) { setError(err.message); }
+    };
+
+    // --- Remove Performer ---
+    const handleRemovePerformer = async (gigId: string, assignmentId: string) => {
+        try {
+            const res = await fetch(`${API}/gigs/${gigId}/assignments/${assignmentId}`, {
+                method: "DELETE", headers,
+            });
+            if (!res.ok) throw new Error("Failed to remove performer");
+            await fetchAll();
+            // Refresh selected gig
+            const updatedGig = gigs.find((g) => g.id === gigId);
+            if (updatedGig) setSelectedGig(updatedGig);
+        } catch (err: any) { alert(err.message); }
+    };
+
+    // --- Remove Asset ---
+    const handleRemoveAsset = async (gigId: string, gigAssetId: string) => {
+        try {
+            const res = await fetch(`${API}/gigs/${gigId}/assets/${gigAssetId}`, {
+                method: "DELETE", headers,
+            });
+            if (!res.ok) throw new Error("Failed to remove equipment");
+            await fetchAll();
+            // Refresh selected gig
+            const updatedGig = gigs.find((g) => g.id === gigId);
+            if (updatedGig) setSelectedGig(updatedGig);
+        } catch (err: any) { alert(err.message); }
     };
 
     if (isLoading) {
@@ -384,7 +470,15 @@ export default function DispatchBoard() {
                             <CardHeader>
                                 <div className="flex items-center justify-between">
                                     <CardTitle className="text-lg">{selectedGig.title}</CardTitle>
-                                    <Button variant="ghost" size="icon" onClick={() => setSelectedGig(null)}><X className="h-4 w-4" /></Button>
+                                    <div className="flex gap-1">
+                                        {user?.role === "ADMIN" && (
+                                            <>
+                                                <Button variant="ghost" size="icon" onClick={() => openEditGig(selectedGig)}><Edit2 className="h-4 w-4" /></Button>
+                                                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={handleDeleteGig} title="Delete Gig"><Trash2 className="h-4 w-4" /></Button>
+                                            </>
+                                        )}
+                                        <Button variant="ghost" size="icon" onClick={() => setSelectedGig(null)}><X className="h-4 w-4" /></Button>
+                                    </div>
                                 </div>
                                 {selectedGig.description && <p className="text-sm text-muted-foreground">{selectedGig.description}</p>}
                             </CardHeader>
@@ -410,9 +504,14 @@ export default function DispatchBoard() {
                                     {selectedGig.assignments?.length > 0 ? (
                                         <div className="space-y-1">
                                             {selectedGig.assignments.map((a: any) => (
-                                                <Badge key={a.id} variant="secondary" className="mr-1">
-                                                    {a.performer.user.firstName} {a.performer.user.lastName}
-                                                </Badge>
+                                                <div key={a.id} className="flex items-center justify-between bg-secondary/30 rounded-md px-2 py-1 mb-1">
+                                                    <span className="text-xs font-medium">{a.performer.user.firstName} {a.performer.user.lastName}</span>
+                                                    {user?.role === "ADMIN" && (
+                                                        <button onClick={() => handleRemovePerformer(selectedGig.id, a.id)} className="text-muted-foreground hover:text-destructive">
+                                                            <MinusCircle className="h-3 w-3" />
+                                                        </button>
+                                                    )}
+                                                </div>
                                             ))}
                                         </div>
                                     ) : (
@@ -428,9 +527,17 @@ export default function DispatchBoard() {
                                     {selectedGig.assets?.length > 0 ? (
                                         <div className="space-y-1">
                                             {selectedGig.assets.map((a: any) => (
-                                                <Badge key={a.id} variant="outline" className="mr-1">
-                                                    {a.asset.name} <span className="ml-1 text-muted-foreground">({a.asset.sku})</span>
-                                                </Badge>
+                                                <div key={a.id} className="flex items-center justify-between border rounded-md px-2 py-1 mb-1">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[10px] font-medium">{a.asset.name}</span>
+                                                        <span className="text-[8px] text-muted-foreground uppercase">{a.asset.sku}</span>
+                                                    </div>
+                                                    {user?.role === "ADMIN" && (
+                                                        <button onClick={() => handleRemoveAsset(selectedGig.id, a.id)} className="text-muted-foreground hover:text-destructive">
+                                                            <MinusCircle className="h-3 w-3" />
+                                                        </button>
+                                                    )}
+                                                </div>
                                             ))}
                                         </div>
                                     ) : (
@@ -531,6 +638,60 @@ export default function DispatchBoard() {
                     </Card>
                 </div>
             </div>
+            {/* Edit Gig Dialog */}
+            <Dialog open={showEditGig} onOpenChange={setShowEditGig}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Edit Gig Details</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div>
+                            <Label>Event Title *</Label>
+                            <Input value={gigForm.title} onChange={(e) => setGigForm({ ...gigForm, title: e.target.value })} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="col-span-2">
+                                <Label>Date *</Label>
+                                <Input type="date" value={gigForm.date} onChange={(e) => setGigForm({ ...gigForm, date: e.target.value })} />
+                            </div>
+                            <div>
+                                <Label>Start Time *</Label>
+                                <Input type="time" value={gigForm.startTime} onChange={(e) => setGigForm({ ...gigForm, startTime: e.target.value })} />
+                            </div>
+                            <div>
+                                <Label>End Time *</Label>
+                                <Input type="time" value={gigForm.endTime} onChange={(e) => setGigForm({ ...gigForm, endTime: e.target.value })} />
+                            </div>
+                        </div>
+                        <div>
+                            <Label>Client *</Label>
+                            <Select value={gigForm.clientId} onValueChange={(v) => setGigForm({ ...gigForm, clientId: v })}>
+                                <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
+                                <SelectContent>
+                                    {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name} ({c.companyName || 'Individual'})</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div>
+                            <Label>Location *</Label>
+                            <Select value={gigForm.locationId} onValueChange={(v) => setGigForm({ ...gigForm, locationId: v })}>
+                                <SelectTrigger><SelectValue placeholder="Select location" /></SelectTrigger>
+                                <SelectContent>
+                                    {locations.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div>
+                            <Label>Description</Label>
+                            <Textarea value={gigForm.description} onChange={(e) => setGigForm({ ...gigForm, description: e.target.value })} />
+                        </div>
+                    </div>
+                    {error && <p className="text-xs text-destructive">{error}</p>}
+                    <DialogFooter>
+                        <Button onClick={handleUpdateGig}>Save Changes</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

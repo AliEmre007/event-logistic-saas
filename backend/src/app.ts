@@ -10,6 +10,9 @@ import assetRoutes from './routes/asset.routes';
 import invoiceRoutes from './routes/invoice.routes';
 import clientRoutes from './routes/client.routes';
 import locationRoutes from './routes/location.routes';
+import performerRoutes from './routes/performer.routes';
+import userRoutes from './routes/user.routes';
+
 
 const app: Express = express();
 
@@ -29,6 +32,9 @@ app.use('/api/assets', assetRoutes);
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/clients', clientRoutes);
 app.use('/api/locations', locationRoutes);
+app.use('/api/performers', performerRoutes);
+app.use('/api/users', userRoutes);
+
 
 // Health check
 app.get('/api/health', (req: Request, res: Response) => {
