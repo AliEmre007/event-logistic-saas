@@ -14,9 +14,10 @@ interface AuthState {
     isLoading: boolean;
     login: (user: User, token: string) => void;
     logout: () => void;
+    hydrate: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
     user: null,
     token: typeof window !== 'undefined' ? localStorage.getItem('token') : null,
     isLoading: true,
@@ -28,4 +29,27 @@ export const useAuthStore = create<AuthState>((set) => ({
         localStorage.removeItem('token');
         set({ user: null, token: null, isLoading: false });
     },
+    hydrate: async () => {
+        const token = get().token;
+        if (!token) {
+            set({ isLoading: false });
+            return;
+        }
+        try {
+            const res = await fetch('http://localhost:5000/api/auth/me', {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (res.ok) {
+                const data = await res.json();
+                set({ user: data.data.user, isLoading: false });
+            } else {
+                // Token invalid/expired
+                localStorage.removeItem('token');
+                set({ user: null, token: null, isLoading: false });
+            }
+        } catch {
+            set({ isLoading: false });
+        }
+    },
 }));
+

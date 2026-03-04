@@ -8,6 +8,8 @@ import authRoutes from './routes/auth.routes';
 import gigRoutes from './routes/gig.routes';
 import assetRoutes from './routes/asset.routes';
 import invoiceRoutes from './routes/invoice.routes';
+import clientRoutes from './routes/client.routes';
+import locationRoutes from './routes/location.routes';
 
 const app: Express = express();
 
@@ -25,6 +27,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/gigs', gigRoutes);
 app.use('/api/assets', assetRoutes);
 app.use('/api/invoices', invoiceRoutes);
+app.use('/api/clients', clientRoutes);
+app.use('/api/locations', locationRoutes);
 
 // Health check
 app.get('/api/health', (req: Request, res: Response) => {
