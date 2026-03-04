@@ -1,0 +1,154 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  PERFORMER
+}
+
+enum AssetState {
+  AVAILABLE
+  IN_USE
+  MAINTENANCE_CLEANING
+  OUT_OF_SERVICE
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+  OVERDUE
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String   // bcrypt hashed
+  role      Role     @default(PERFORMER)
+  firstName String
+  lastName  String
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  performerProfile PerformerProfile?
+}
+
+model PerformerProfile {
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skills         String[] // e.g., ["Face Painting", "Mascot", "Balloon Animals"]
+  active         Boolean  @default(true)
+  
+  gigAssignments GigAssignment[]
+}
+
+model Client {
+  id             String    @id @default(uuid())
+  name           String
+  companyName    String?
+  email          String    @unique
+  phone          String?
+  billingAddress String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  gigs           Gig[]
+  invoices       Invoice[]
+}
+
+model Location {
+  id        String   @id @default(uuid())
+  name      String
+  address   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  gigs      Gig[]
+  assets    Asset[]  @relation("AssetLocation") // Current location of asset
+}
+
+model Asset {
+  id          String     @id @default(uuid())
+  name        String
+  sku         String     @unique
+  category    String     // e.g., "Costume", "Equipment"
+  state       AssetState @default(AVAILABLE)
+  locationId  String?
+  location    Location?  @relation("AssetLocation", fields: [locationId], references: [id], onDelete: SetNull)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  gigAssets   GigAsset[]
+}
+
+model Gig {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  startTime   DateTime
+  endTime     DateTime
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  locationId  String
+  location    Location @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  status      String   @default("SCHEDULED") // SCHEDULED, COMPLETED, CANCELLED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  assignments GigAssignment[]
+  assets      GigAsset[]
+  invoice     Invoice?
+}
+
+model GigAssignment {
+  id                 String           @id @default(uuid())
+  gigId              String
+  gig                Gig              @relation(fields: [gigId], references: [id], onDelete: Cascade)
+  performerProfileId String
+  performer          PerformerProfile @relation(fields: [performerProfileId], references: [id], onDelete: Restrict)
+  assignedAt         DateTime         @default(now())
+
+  @@unique([gigId, performerProfileId])
+  @@index([performerProfileId])
+  @@index([gigId])
+}
+
+model GigAsset {
+  id         String   @id @default(uuid())
+  gigId      String
+  gig        Gig      @relation(fields: [gigId], references: [id], onDelete: Cascade)
+  assetId    String
+  asset      Asset    @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  assignedAt DateTime @default(now())
+
+  @@unique([gigId, assetId])
+  @@index([assetId])
+  @@index([gigId])
+}
+
+model Invoice {
+  id            String        @id @default(uuid())
+  gigId         String        @unique
+  gig           Gig           @relation(fields: [gigId], references: [id], onDelete: Restrict)
+  clientId      String
+  client        Client        @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  amount        Decimal       @db.Decimal(10, 2)
+  status        InvoiceStatus @default(PENDING)
+  issuedAt      DateTime      @default(now())
+  dueDate       DateTime
+  paidAt        DateTime?
+  pdfUrl        String?       // URL to generated PDF invoice
+  billingDetails String?      // Snapshot of billing address at time of issue
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}

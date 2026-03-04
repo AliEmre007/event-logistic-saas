@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: event_saas_db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-eventsaas}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - app-network
+
+  # Backend Express API
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: event_saas_backend
+    working_dir: /app/backend
+    # We will run npm commands dynamically if package.json doesn't exist yet, 
+    # but initially we just keep it alive or run standard dev command once initialized.
+    command: sh -c "if [ ! -f package.json ]; then npm init -y && npm i express typescript @types/express @types/node ts-node nodemon copyfiles dotenv cors helmet morgan bcryptjs jsonwebtoken zod prisma @prisma/client && npx tsc --init; fi && npm install && npx prisma generate && npm run dev"
+    volumes:
+      - ./backend:/app/backend
+      - ./prisma:/app/prisma # Share prisma schema
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=development
+      - PORT=5000
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-eventsaas}?schema=public
+      - JWT_SECRET=supersecret_change_me_in_production
+    depends_on:
+      - db
+    networks:
+      - app-network
+
+  # Frontend Next.js Dashboard
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: event_saas_frontend
+    working_dir: /app/frontend
+    command: sh -c "if [ ! -f package.json ]; then npx create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --import-alias '@/*' --use-npm; fi && npm install && npm run dev"
+    volumes:
+      - ./frontend:/app/frontend
+      - /app/frontend/node_modules
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:5000/api
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  pgdata:
