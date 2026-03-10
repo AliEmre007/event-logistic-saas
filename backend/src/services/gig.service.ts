@@ -1,6 +1,6 @@
 import { prisma } from '../lib/prisma';
 import { BadRequestError, ConflictError, NotFoundError } from '../utils/errors';
-import { CreateGigInput, AssignPerformerInput, AssignAssetInput } from '../schema/gig.schema';
+import { CreateGigInput, UpdateGigInput, AssignPerformerInput, AssignAssetInput } from '../schema/gig.schema';
 
 export const getAllGigs = async () => {
     return await prisma.gig.findMany({
@@ -114,7 +114,7 @@ export const assignAsset = async (gigId: string, data: AssignAssetInput) => {
                 gigId,
                 assetId: data.assetId,
             },
-            include: { asset: true }
+            include: { asset: true },
         });
     } catch (error: any) {
         if (error.code === 'P2002') {
@@ -124,16 +124,17 @@ export const assignAsset = async (gigId: string, data: AssignAssetInput) => {
     }
 };
 
-export const updateGig = async (id: string, data: Partial<CreateGigInput> & { status?: string }) => {
+export const updateGig = async (id: string, data: UpdateGigInput) => {
     await getGigById(id); // Ensure exists
-    const updateData: any = {};
-    if (data.title) updateData.title = data.title;
+
+    const updateData: Record<string, unknown> = {};
+    if (data.title !== undefined) updateData.title = data.title;
     if (data.description !== undefined) updateData.description = data.description;
-    if (data.startTime) updateData.startTime = new Date(data.startTime);
-    if (data.endTime) updateData.endTime = new Date(data.endTime);
-    if (data.clientId) updateData.clientId = data.clientId;
-    if (data.locationId) updateData.locationId = data.locationId;
-    if (data.status) updateData.status = data.status;
+    if (data.startTime !== undefined) updateData.startTime = new Date(data.startTime);
+    if (data.endTime !== undefined) updateData.endTime = new Date(data.endTime);
+    if (data.clientId !== undefined) updateData.clientId = data.clientId;
+    if (data.locationId !== undefined) updateData.locationId = data.locationId;
+    if (data.status !== undefined) updateData.status = data.status;
 
     return await prisma.gig.update({
         where: { id },
@@ -168,4 +169,3 @@ export const removeAssetAssignment = async (gigId: string, gigAssetId: string) =
     if (!gigAsset) throw new NotFoundError('Asset assignment not found');
     await prisma.gigAsset.delete({ where: { id: gigAssetId } });
 };
-

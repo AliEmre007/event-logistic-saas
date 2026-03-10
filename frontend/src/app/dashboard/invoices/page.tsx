@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useAuthStore } from "@/store/authStore";
+import { API_BASE_URL } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,7 +29,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
 
-const API = "http://localhost:5000/api";
+const API = API_BASE_URL;
 
 interface Invoice {
     id: string;
@@ -114,7 +115,7 @@ export default function InvoicesPage() {
                 body: JSON.stringify({
                     gigId: form.gigId,
                     amount: parseFloat(form.amount),
-                    dueDate: form.dueDate
+                    dueDate: new Date(`${form.dueDate}T00:00:00`).toISOString()
                 }),
             });
             const data = await res.json();

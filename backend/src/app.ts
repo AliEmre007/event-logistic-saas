@@ -1,5 +1,5 @@
 import express, { Express, Request, Response } from 'express';
-import cors from 'cors';
+import cors, { CorsOptions } from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import { errorHandler } from './middlewares/errorHandler';
@@ -12,13 +12,26 @@ import clientRoutes from './routes/client.routes';
 import locationRoutes from './routes/location.routes';
 import performerRoutes from './routes/performer.routes';
 import userRoutes from './routes/user.routes';
-
+import { getCorsOrigins } from './config/env';
 
 const app: Express = express();
 
+const allowedCorsOrigins = getCorsOrigins();
+const corsOptions: CorsOptions = {
+    origin: (origin, callback) => {
+        if (!origin || allowedCorsOrigins.includes(origin)) {
+            callback(null, true);
+            return;
+        }
+
+        callback(new Error('Origin not allowed by CORS'));
+    },
+    credentials: true,
+};
+
 // Middlewares
 app.use(helmet());
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 if (process.env.NODE_ENV !== 'production') {
@@ -34,7 +47,6 @@ app.use('/api/clients', clientRoutes);
 app.use('/api/locations', locationRoutes);
 app.use('/api/performers', performerRoutes);
 app.use('/api/users', userRoutes);
-
 
 // Health check
 app.get('/api/health', (req: Request, res: Response) => {

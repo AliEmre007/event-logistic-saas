@@ -1,11 +1,13 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { Role } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { BadRequestError, UnauthorizedError } from '../utils/errors';
 import { RegisterInput, LoginInput } from '../schema/auth.schema';
+import { getJwtSecret } from '../config/env';
 
 const signToken = (id: string, role: string) => {
-    return jwt.sign({ id, role }, process.env.JWT_SECRET || 'supersecret_change_me_in_production', {
+    return jwt.sign({ id, role }, getJwtSecret(), {
         expiresIn: '7d',
     });
 };
@@ -22,6 +24,10 @@ export const registerUser = async (data: RegisterInput) => {
     const hashedPassword = await bcrypt.hash(data.password, 12);
 
     const newUser = await prisma.$transaction(async (tx) => {
+        // Bootstrap rule: only the first account can become ADMIN.
+        const adminCount = await tx.user.count({ where: { role: 'ADMIN' } });
+        const assignedRole: Role = adminCount === 0 ? 'ADMIN' : 'PERFORMER';
+
         const user = await tx.user.create({
             data: {
                 email: data.email,
@@ -29,7 +35,7 @@ export const registerUser = async (data: RegisterInput) => {
                 firstName: data.firstName,
                 lastName: data.lastName,
                 phone: data.phone,
-                role: data.role,
+                role: assignedRole,
             },
             select: {
                 id: true,
@@ -40,7 +46,7 @@ export const registerUser = async (data: RegisterInput) => {
             },
         });
 
-        if (data.role === 'PERFORMER') {
+        if (assignedRole === 'PERFORMER') {
             await tx.performerProfile.create({
                 data: {
                     userId: user.id,

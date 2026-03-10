@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../lib/prisma';
 import { UnauthorizedError, ForbiddenError } from '../utils/errors';
+import { getJwtSecret } from '../config/env';
 
 // Extend Express Request interface to include user
 declare global {
@@ -36,12 +37,12 @@ export const authenticate = async (
         }
 
         // Verify token
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'supersecret_change_me_in_production') as { id: string, role: string };
+        const decoded = jwt.verify(token, getJwtSecret()) as { id: string; role: string };
 
         // Check if user still exists
         const currentUser = await prisma.user.findUnique({
             where: { id: decoded.id },
-            select: { id: true, role: true }
+            select: { id: true, role: true },
         });
 
         if (!currentUser) {

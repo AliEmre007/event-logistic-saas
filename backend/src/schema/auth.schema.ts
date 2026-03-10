@@ -7,8 +7,7 @@ export const registerSchema = z.object({
         firstName: z.string().min(1, { message: 'First name is required' }),
         lastName: z.string().min(1, { message: 'Last name is required' }),
         phone: z.string().optional(),
-        role: z.enum(['ADMIN', 'PERFORMER']).default('PERFORMER'),
-        skills: z.array(z.string()).optional(), // specific to performer
+        skills: z.array(z.string()).optional(),
     }),
 });
 

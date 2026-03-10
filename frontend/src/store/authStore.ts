@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { apiUrl } from '@/lib/api';
 
 interface User {
     id: string;
@@ -36,7 +37,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             return;
         }
         try {
-            const res = await fetch('http://localhost:5000/api/auth/me', {
+            const res = await fetch(apiUrl('/auth/me'), {
                 headers: { Authorization: `Bearer ${token}` },
             });
             if (res.ok) {
@@ -52,4 +53,3 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         }
     },
 }));
-

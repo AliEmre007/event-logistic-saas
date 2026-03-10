@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
+import { apiUrl } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
@@ -13,7 +14,6 @@ export default function RegisterPage() {
         lastName: "",
         email: "",
         password: "",
-        role: "ADMIN",
     });
     const [error, setError] = useState("");
     const [isLoading, setIsLoading] = useState(false);
@@ -21,7 +21,7 @@ export default function RegisterPage() {
     const router = useRouter();
     const login = useAuthStore((state) => state.login);
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
 
@@ -31,7 +31,7 @@ export default function RegisterPage() {
         setError("");
 
         try {
-            const res = await fetch("http://localhost:5000/api/auth/register", {
+            const res = await fetch(apiUrl('/auth/register'), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(formData),
@@ -60,7 +60,7 @@ export default function RegisterPage() {
                         Create an Account
                     </h2>
                     <p className="mt-2 text-sm text-gray-600">
-                        Set up your new EventLogistics agency
+                        The first registered account becomes admin automatically.
                     </p>
                 </div>
 
@@ -114,20 +114,8 @@ export default function RegisterPage() {
                             minLength={8}
                             value={formData.password}
                             onChange={handleChange}
-                            placeholder="••••••••"
+                            placeholder="********"
                         />
-                    </div>
-                    <div>
-                        <label className="mb-1 block text-sm font-medium text-gray-700">Account Type</label>
-                        <select
-                            name="role"
-                            value={formData.role}
-                            onChange={handleChange}
-                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            <option value="ADMIN">Agency Admin (Dispatcher)</option>
-                            <option value="PERFORMER">Talent / Performer</option>
-                        </select>
                     </div>
 
                     <Button type="submit" className="w-full mt-6" disabled={isLoading}>

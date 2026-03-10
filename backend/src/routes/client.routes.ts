@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { authenticate, authorizeRole } from '../middlewares/authMiddleware';
+import { validateRequest } from '../middlewares/validateRequest';
+import { createClientSchema, updateClientSchema } from '../schema/client.schema';
 import { prisma } from '../lib/prisma';
 import { Request, Response, NextFunction } from 'express';
 
@@ -16,7 +18,9 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
             include: { _count: { select: { gigs: true, invoices: true } } },
         });
         res.json({ status: 'success', data: clients });
-    } catch (error) { next(error); }
+    } catch (error) {
+        next(error);
+    }
 });
 
 // GET client by ID
@@ -31,26 +35,32 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
         });
         if (!client) return res.status(404).json({ status: 'error', message: 'Client not found' });
         res.json({ status: 'success', data: client });
-    } catch (error) { next(error); }
+    } catch (error) {
+        next(error);
+    }
 });
 
 // POST create client
-router.post('/', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/', validateRequest(createClientSchema), async (req: Request, res: Response, next: NextFunction) => {
     try {
         const client = await prisma.client.create({ data: req.body });
         res.status(201).json({ status: 'success', data: client });
-    } catch (error) { next(error); }
+    } catch (error) {
+        next(error);
+    }
 });
 
 // PUT update client
-router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
+router.put('/:id', validateRequest(updateClientSchema), async (req: Request, res: Response, next: NextFunction) => {
     try {
         const client = await prisma.client.update({
             where: { id: req.params.id },
             data: req.body,
         });
         res.json({ status: 'success', data: client });
-    } catch (error) { next(error); }
+    } catch (error) {
+        next(error);
+    }
 });
 
 // DELETE client
@@ -66,7 +76,9 @@ router.delete('/:id', async (req: Request, res: Response, next: NextFunction) =>
         }
         await prisma.client.delete({ where: { id: req.params.id } });
         res.json({ status: 'success', message: 'Client deleted' });
-    } catch (error) { next(error); }
+    } catch (error) {
+        next(error);
+    }
 });
 
 export default router;

@@ -1,7 +1,4 @@
-version: '3.8'
-
 services:
-  # PostgreSQL Database
   db:
     image: postgres:15-alpine
     container_name: event_saas_db
@@ -13,49 +10,55 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-eventsaas}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - app-network
 
-  # Backend Express API
   backend:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: backend/Dockerfile
+      target: dev
     container_name: event_saas_backend
     working_dir: /app/backend
-    # We will run npm commands dynamically if package.json doesn't exist yet, 
-    # but initially we just keep it alive or run standard dev command once initialized.
-    command: sh -c "if [ ! -f package.json ]; then npm init -y && npm i express typescript @types/express @types/node ts-node nodemon copyfiles dotenv cors helmet morgan bcryptjs jsonwebtoken zod prisma @prisma/client && npx tsc --init; fi && npm install && npx prisma generate && npm run dev"
+    command: sh -c "npx prisma db push && npm run dev"
     volumes:
       - ./backend:/app/backend
-      - ./prisma:/app/prisma # Share prisma schema
+      - ./prisma:/app/prisma
+      - backend_node_modules:/app/backend/node_modules
     ports:
       - "5000:5000"
     environment:
-      - NODE_ENV=development
-      - PORT=5000
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-eventsaas}?schema=public
-      - JWT_SECRET=supersecret_change_me_in_production
+      NODE_ENV: development
+      PORT: 5000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-eventsaas}?schema=public
+      JWT_SECRET: ${JWT_SECRET:-supersecret_change_me_in_production}
+      CORS_ORIGIN: http://localhost:3000,http://127.0.0.1:3000
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     networks:
       - app-network
 
-  # Frontend Next.js Dashboard
   frontend:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: frontend/Dockerfile
+      target: dev
     container_name: event_saas_frontend
     working_dir: /app/frontend
-    command: sh -c "if [ ! -f package.json ]; then npx create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --import-alias '@/*' --use-npm; fi && npm install && npm run dev"
+    command: sh -c "rm -rf .next && npm run dev"
     volumes:
       - ./frontend:/app/frontend
-      - /app/frontend/node_modules
+      - frontend_node_modules:/app/frontend/node_modules
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:5000/api
+      NEXT_PUBLIC_API_URL: http://localhost:5000/api
     depends_on:
       - backend
     networks:
@@ -67,3 +70,5 @@ networks:
 
 volumes:
   pgdata:
+  backend_node_modules:
+  frontend_node_modules:

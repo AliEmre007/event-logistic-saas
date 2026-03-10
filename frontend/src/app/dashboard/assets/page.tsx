@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useAuthStore } from "@/store/authStore";
+import { API_BASE_URL } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -26,7 +27,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-const API = "http://localhost:5000/api";
+const API = API_BASE_URL;
 
 interface Asset {
     id: string;
@@ -245,12 +246,12 @@ export default function AssetsPage() {
                                 </div>
                                 <div>
                                     <Label>Location</Label>
-                                    <Select value={form.locationId} onValueChange={(v) => setForm({ ...form, locationId: v })}>
+                                    <Select value={form.locationId || "unassigned"} onValueChange={(v) => setForm({ ...form, locationId: v === "unassigned" ? "" : v })}>
                                         <SelectTrigger>
                                             <SelectValue placeholder="Storage Location..." />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="none">None / Unassigned</SelectItem>
+                                            <SelectItem value="unassigned">None / Unassigned</SelectItem>
                                             {locations.map(l => (
                                                 <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
                                             ))}

@@ -1,6 +1,6 @@
 import { prisma } from '../lib/prisma';
 import { NotFoundError, BadRequestError } from '../utils/errors';
-import { CreateAssetInput, UpdateAssetStateInput } from '../schema/asset.schema';
+import { CreateAssetInput, UpdateAssetInput, UpdateAssetStateInput } from '../schema/asset.schema';
 
 export const getAllAssets = async () => {
     return await prisma.asset.findMany({
@@ -37,21 +37,29 @@ export const createAsset = async (data: CreateAssetInput) => {
     }
 };
 
-export const updateAsset = async (id: string, data: Partial<CreateAssetInput> & { state?: string }) => {
+export const updateAsset = async (id: string, data: UpdateAssetInput) => {
     const asset = await prisma.asset.findUnique({ where: { id } });
     if (!asset) throw new NotFoundError('Asset not found');
 
-    return await prisma.asset.update({
-        where: { id },
-        data: {
-            name: data.name,
-            sku: data.sku,
-            category: data.category,
-            locationId: data.locationId,
-            state: data.state as any, // Cast as any if enum compatibility is strict
-        },
-        include: { location: true },
-    });
+    const updateData: Record<string, unknown> = {};
+    if (data.name !== undefined) updateData.name = data.name;
+    if (data.sku !== undefined) updateData.sku = data.sku;
+    if (data.category !== undefined) updateData.category = data.category;
+    if (data.locationId !== undefined) updateData.locationId = data.locationId;
+    if (data.state !== undefined) updateData.state = data.state;
+
+    try {
+        return await prisma.asset.update({
+            where: { id },
+            data: updateData,
+            include: { location: true },
+        });
+    } catch (error: any) {
+        if (error.code === 'P2002') {
+            throw new BadRequestError('An asset with this SKU already exists');
+        }
+        throw error;
+    }
 };
 
 export const updateAssetState = async (id: string, data: UpdateAssetStateInput) => {

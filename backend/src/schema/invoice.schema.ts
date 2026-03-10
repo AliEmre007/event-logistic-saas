@@ -1,10 +1,14 @@
 import { z } from 'zod';
 
+const dueDateSchema = z.string().refine((value) => !Number.isNaN(Date.parse(value)), {
+    message: 'Invalid due date format',
+});
+
 export const createInvoiceSchema = z.object({
     body: z.object({
         gigId: z.string().uuid(),
         amount: z.number().positive(),
-        dueDate: z.string().datetime(),
+        dueDate: dueDateSchema,
     }),
 });
 

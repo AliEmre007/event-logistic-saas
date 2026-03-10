@@ -2,7 +2,7 @@ import { Router } from 'express';
 import * as assetController from '../controllers/asset.controller';
 import { validateRequest } from '../middlewares/validateRequest';
 import { authenticate, authorizeRole } from '../middlewares/authMiddleware';
-import { createAssetSchema, updateAssetStateSchema } from '../schema/asset.schema';
+import { createAssetSchema, updateAssetSchema, updateAssetStateSchema } from '../schema/asset.schema';
 
 const router = Router();
 
@@ -15,7 +15,7 @@ router.get('/:id', assetController.getAssetById);
 // Manage assets (Admin only)
 router.use(authorizeRole('ADMIN'));
 router.post('/', validateRequest(createAssetSchema), assetController.createAsset);
-router.put('/:id', assetController.updateAsset);
+router.put('/:id', validateRequest(updateAssetSchema), assetController.updateAsset);
 router.patch('/:id/state', validateRequest(updateAssetStateSchema), assetController.updateAssetState);
 router.delete('/:id', assetController.deleteAsset);
 

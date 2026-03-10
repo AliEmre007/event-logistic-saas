@@ -1,5 +1,5 @@
 import { prisma } from '../lib/prisma';
-import { NotFoundError, ConflictError } from '../utils/errors';
+import { NotFoundError, ConflictError, BadRequestError } from '../utils/errors';
 
 export const getAllPerformers = async () => {
     return await prisma.performerProfile.findMany({
@@ -54,6 +54,9 @@ export const createPerformer = async (data: { userId: string; skills: string[] }
     // Check if user exists
     const user = await prisma.user.findUnique({ where: { id: data.userId } });
     if (!user) throw new NotFoundError('User not found');
+    if (user.role !== 'PERFORMER') {
+        throw new BadRequestError('Only users with PERFORMER role can have a performer profile');
+    }
 
     // Check if already has a profile
     const existing = await prisma.performerProfile.findUnique({ where: { userId: data.userId } });

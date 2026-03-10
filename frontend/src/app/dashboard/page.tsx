@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useAuthStore } from "@/store/authStore";
+import { API_BASE_URL } from "@/lib/api";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, isToday } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar, ChevronLeft, ChevronRight, Plus, Clock, MapPin, Users, Package, X, UserPlus, BoxIcon, Trash2, Edit2, MinusCircle, AlertTriangle } from "lucide-react";
 
-const API = "http://localhost:5000/api";
+const API = API_BASE_URL;
 
 export default function DispatchBoard() {
     const { token, user } = useAuthStore();
@@ -62,23 +63,35 @@ export default function DispatchBoard() {
         if (!token) return;
         try {
             setIsLoading(true);
-            const [gigsRes, clientsRes, locationsRes, assetsRes] = await Promise.all([
+
+            const requests = [
                 fetch(`${API}/gigs`, { headers }),
                 fetch(`${API}/clients`, { headers }),
                 fetch(`${API}/locations`, { headers }),
                 fetch(`${API}/assets`, { headers }),
-            ]);
+                ...(user?.role === "ADMIN" ? [fetch(`${API}/performers`, { headers })] : []),
+            ];
+
+            const [gigsRes, clientsRes, locationsRes, assetsRes, performersRes] = await Promise.all(requests);
 
             if (gigsRes.ok) { const d = await gigsRes.json(); setGigs(d.data || []); }
             if (clientsRes.ok) { const d = await clientsRes.json(); setClients(d.data || []); }
             if (locationsRes.ok) { const d = await locationsRes.json(); setLocations(d.data || []); }
             if (assetsRes.ok) { const d = await assetsRes.json(); setAssets(d.data || []); }
+
+            if (user?.role === "ADMIN" && performersRes?.ok) {
+                const d = await performersRes.json();
+                setPerformers(d.data || []);
+            }
+            if (user?.role !== "ADMIN") {
+                setPerformers([]);
+            }
         } catch (err) {
             console.error("Failed to fetch data", err);
         } finally {
             setIsLoading(false);
         }
-    }, [token]);
+    }, [token, user?.role]);
 
     useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -91,6 +104,19 @@ export default function DispatchBoard() {
     const paddedDays: (Date | null)[] = [...Array(startPadding).fill(null), ...daysInMonth];
 
     const gigsOnDay = (day: Date) => gigs.filter((g) => isSameDay(new Date(g.startTime), day));
+
+    const refreshSelectedGig = async (gigId: string) => {
+        const res = await fetch(`${API}/gigs/${gigId}`, { headers });
+        if (res.ok) {
+            const data = await res.json();
+            setSelectedGig(data.data);
+        }
+    };
+
+    const getAssignablePerformers = (gig: any) => {
+        const assigned = new Set((gig.assignments || []).map((a: any) => a.performerProfileId));
+        return performers.filter((performer) => performer.active && !assigned.has(performer.id));
+    };
 
     // --- Create Gig ---
     const handleCreateGig = async () => {
@@ -155,9 +181,7 @@ export default function DispatchBoard() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.message || "Failed to assign performer");
             await fetchAll();
-            // Refresh selected gig
-            const updatedGig = gigs.find((g) => g.id === gigId);
-            if (updatedGig) setSelectedGig(updatedGig);
+            await refreshSelectedGig(gigId);
         } catch (err: any) { setError(err.message); }
     };
 
@@ -171,9 +195,7 @@ export default function DispatchBoard() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.message || "Failed to assign asset");
             await fetchAll();
-            // Refresh selected gig
-            const updatedGig = gigs.find((g) => g.id === gigId);
-            if (updatedGig) setSelectedGig(updatedGig);
+            await refreshSelectedGig(gigId);
         } catch (err: any) { setError(err.message); }
     };
 
@@ -226,9 +248,7 @@ export default function DispatchBoard() {
             });
             if (!res.ok) throw new Error("Failed to remove performer");
             await fetchAll();
-            // Refresh selected gig
-            const updatedGig = gigs.find((g) => g.id === gigId);
-            if (updatedGig) setSelectedGig(updatedGig);
+            await refreshSelectedGig(gigId);
         } catch (err: any) { alert(err.message); }
     };
 
@@ -240,9 +260,7 @@ export default function DispatchBoard() {
             });
             if (!res.ok) throw new Error("Failed to remove equipment");
             await fetchAll();
-            // Refresh selected gig
-            const updatedGig = gigs.find((g) => g.id === gigId);
-            if (updatedGig) setSelectedGig(updatedGig);
+            await refreshSelectedGig(gigId);
         } catch (err: any) { alert(err.message); }
     };
 
@@ -518,6 +536,20 @@ export default function DispatchBoard() {
                                         <p className="text-xs text-amber-600 bg-amber-50 rounded px-2 py-1">No performers assigned</p>
                                     )}
                                 </div>
+
+                                {user?.role === "ADMIN" && getAssignablePerformers(selectedGig).length > 0 && (
+                                    <div className="border-t pt-3">
+                                        <Label className="text-xs">Quick Assign Performer</Label>
+                                        <Select onValueChange={(v) => handleAssignPerformer(selectedGig.id, v)}>
+                                            <SelectTrigger className="mt-1"><SelectValue placeholder="Pick performer..." /></SelectTrigger>
+                                            <SelectContent>
+                                                {getAssignablePerformers(selectedGig).map((p: any) => (
+                                                    <SelectItem key={p.id} value={p.id}>{p.user.firstName} {p.user.lastName}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                )}
 
                                 {/* Assigned Assets */}
                                 <div className="border-t pt-3">

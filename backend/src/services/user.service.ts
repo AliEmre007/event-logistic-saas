@@ -1,5 +1,5 @@
 import { prisma } from '../lib/prisma';
-import { NotFoundError, BadRequestError } from '../utils/errors';
+import { NotFoundError } from '../utils/errors';
 
 export const getAllUsers = async () => {
     return await prisma.user.findMany({
@@ -12,8 +12,8 @@ export const getAllUsers = async () => {
             phone: true,
             createdAt: true,
             performerProfile: {
-                select: { id: true, active: true }
-            }
+                select: { id: true, active: true },
+            },
         },
         orderBy: { lastName: 'asc' },
     });
@@ -30,8 +30,8 @@ export const getUserById = async (id: string) => {
             role: true,
             phone: true,
             createdAt: true,
-            performerProfile: true
-        }
+            performerProfile: true,
+        },
     });
 
     if (!user) throw new NotFoundError('User not found');
@@ -51,8 +51,8 @@ export const updateUser = async (id: string, data: { firstName?: string; lastNam
             firstName: true,
             lastName: true,
             role: true,
-            phone: true
-        }
+            phone: true,
+        },
     });
 };
 
