@@ -214,7 +214,69 @@ export const assignAsset = async (gigId: string, data: AssignAssetInput, company
 };
 
 export const updateGig = async (id: string, data: UpdateGigInput, companyId?: string | null) => {
-    await getAdminGigById(id, companyId); // Ensure exists in scope
+    const existingGig = await getAdminGigById(id, companyId);
+    const nextStartTime = data.startTime ? new Date(data.startTime) : existingGig.startTime;
+    const nextEndTime = data.endTime ? new Date(data.endTime) : existingGig.endTime;
+    const scheduleChanged = nextStartTime.getTime() !== existingGig.startTime.getTime()
+        || nextEndTime.getTime() !== existingGig.endTime.getTime();
+
+    if (scheduleChanged) {
+        const performerIds = existingGig.assignments.map((assignment) => assignment.performerProfileId);
+        if (performerIds.length > 0) {
+            const performerConflict = await prisma.gigAssignment.findFirst({
+                where: {
+                    gigId: { not: id },
+                    performerProfileId: { in: performerIds },
+                    gig: {
+                        AND: [
+                            { startTime: { lt: nextEndTime } },
+                            { endTime: { gt: nextStartTime } },
+                        ],
+                        ...companyScope(companyId),
+                    },
+                },
+                include: {
+                    performer: { include: { user: { select: { firstName: true, lastName: true } } } },
+                    gig: { select: { title: true } },
+                },
+            });
+
+            if (performerConflict) {
+                const firstName = performerConflict.performer.user.firstName;
+                const lastName = performerConflict.performer.user.lastName;
+                throw new ConflictError(
+                    `Cannot reschedule this gig. ${firstName} ${lastName} is already booked on "${performerConflict.gig.title}".`,
+                );
+            }
+        }
+
+        const assetIds = existingGig.assets.map((gigAsset) => gigAsset.assetId);
+        if (assetIds.length > 0) {
+            const assetConflict = await prisma.gigAsset.findFirst({
+                where: {
+                    gigId: { not: id },
+                    assetId: { in: assetIds },
+                    gig: {
+                        AND: [
+                            { startTime: { lt: nextEndTime } },
+                            { endTime: { gt: nextStartTime } },
+                        ],
+                        ...companyScope(companyId),
+                    },
+                },
+                include: {
+                    asset: { select: { name: true } },
+                    gig: { select: { title: true } },
+                },
+            });
+
+            if (assetConflict) {
+                throw new ConflictError(
+                    `Cannot reschedule this gig. Asset "${assetConflict.asset.name}" is already in use on "${assetConflict.gig.title}".`,
+                );
+            }
+        }
+    }
 
     const updateData: Record<string, unknown> = {};
     if (data.title !== undefined) updateData.title = data.title;

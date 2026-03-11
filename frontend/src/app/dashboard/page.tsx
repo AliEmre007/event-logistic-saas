@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar, ChevronLeft, ChevronRight, Plus, Clock, MapPin, Users, Package, X, UserPlus, BoxIcon, Trash2, Edit2, MinusCircle, AlertTriangle } from "lucide-react";
+import { Calendar, ChevronLeft, ChevronRight, Plus, Clock, MapPin, Users, X, UserPlus, BoxIcon, Trash2, Edit2, MinusCircle } from "lucide-react";
 
 const API = API_BASE_URL;
 const BOOKING_STAGES = ["LEAD", "QUOTED", "CONTRACT_SENT", "CONTRACT_SIGNED", "SCHEDULED", "COMPLETED", "CANCELLED"];
@@ -47,6 +47,17 @@ const parseOptionalAmount = (value: string): number | undefined => {
     return Number.isFinite(parsed) ? parsed : undefined;
 };
 
+const toAmount = (value: unknown): number => {
+    if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const formatCurrency = (value: number): string =>
+    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
+
+const REVENUE_STAGES = new Set(["QUOTED", "CONTRACT_SENT", "CONTRACT_SIGNED", "SCHEDULED", "COMPLETED"]);
+
 export default function DispatchBoard() {
     const { token, user } = useAuthStore();
     const [gigs, setGigs] = useState<any[]>([]);
@@ -54,6 +65,7 @@ export default function DispatchBoard() {
     const [locations, setLocations] = useState<any[]>([]);
     const [performers, setPerformers] = useState<any[]>([]);
     const [assets, setAssets] = useState<any[]>([]);
+    const [invoices, setInvoices] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -117,10 +129,12 @@ export default function DispatchBoard() {
                 fetch(`${API}/clients`, { headers }),
                 fetch(`${API}/locations`, { headers }),
                 fetch(`${API}/assets`, { headers }),
-                ...(user?.role === "ADMIN" ? [fetch(`${API}/performers`, { headers })] : []),
+                ...(user?.role === "ADMIN"
+                    ? [fetch(`${API}/performers`, { headers }), fetch(`${API}/invoices`, { headers })]
+                    : []),
             ];
 
-            const [gigsRes, clientsRes, locationsRes, assetsRes, performersRes] = await Promise.all(requests);
+            const [gigsRes, clientsRes, locationsRes, assetsRes, performersRes, invoicesRes] = await Promise.all(requests);
 
             if (gigsRes.ok) { const d = await gigsRes.json(); setGigs(d.data || []); }
             if (clientsRes.ok) { const d = await clientsRes.json(); setClients(d.data || []); }
@@ -131,8 +145,15 @@ export default function DispatchBoard() {
                 const d = await performersRes.json();
                 setPerformers(d.data || []);
             }
+
+            if (user?.role === "ADMIN" && invoicesRes?.ok) {
+                const d = await invoicesRes.json();
+                setInvoices(d.data || []);
+            }
+
             if (user?.role !== "ADMIN") {
                 setPerformers([]);
+                setInvoices([]);
             }
         } catch (err) {
             console.error("Failed to fetch data", err);
@@ -157,6 +178,25 @@ export default function DispatchBoard() {
 
     const upcomingGigs = gigs.filter((g) => new Date(g.startTime) >= new Date() && matchesStageFilter(g));
 
+    const pipelineValue = gigs.reduce((sum, gig) => {
+        const stage = getGigStage(gig);
+        if (!REVENUE_STAGES.has(stage)) return sum;
+        return sum + toAmount(gig.quotedAmount);
+    }, 0);
+
+    const depositOutstanding = gigs.reduce((sum, gig) => {
+        const stage = getGigStage(gig);
+        if (stage === "CANCELLED") return sum;
+        if (gig.depositPaidAt) return sum;
+        return sum + toAmount(gig.depositRequired);
+    }, 0);
+
+    const outstandingInvoiceValue = invoices
+        .filter((invoice) => invoice.status !== "PAID")
+        .reduce((sum, invoice) => sum + toAmount(invoice.amount), 0);
+
+    const overdueInvoiceCount = invoices.filter((invoice) => invoice.status === "OVERDUE").length;
+
     const refreshSelectedGig = async (gigId: string) => {
         const res = await fetch(`${API}/gigs/${gigId}`, { headers });
         if (res.ok) {
@@ -165,9 +205,32 @@ export default function DispatchBoard() {
         }
     };
 
-    const getAssignablePerformers = (gig: any) => {
+    const getPerformerConflictGig = (gig: any, performerProfileId: string) => {
+        const targetStart = new Date(gig.startTime);
+        const targetEnd = new Date(gig.endTime);
+
+        return gigs.find((candidate) => {
+            if (candidate.id === gig.id) return false;
+            if (getGigStage(candidate) === "CANCELLED") return false;
+
+            const isAssigned = (candidate.assignments || []).some((assignment: any) => assignment.performerProfileId === performerProfileId);
+            if (!isAssigned) return false;
+
+            const candidateStart = new Date(candidate.startTime);
+            const candidateEnd = new Date(candidate.endTime);
+            return candidateStart < targetEnd && candidateEnd > targetStart;
+        }) || null;
+    };
+
+    const getPerformerOptions = (gig: any) => {
         const assigned = new Set((gig.assignments || []).map((a: any) => a.performerProfileId));
-        return performers.filter((performer) => performer.active && !assigned.has(performer.id));
+
+        return performers
+            .filter((performer) => performer.active && !assigned.has(performer.id))
+            .map((performer) => ({
+                performer,
+                conflictGig: getPerformerConflictGig(gig, performer.id),
+            }));
     };
 
     // --- Create Gig ---
@@ -341,6 +404,8 @@ export default function DispatchBoard() {
             await refreshSelectedGig(gigId);
         } catch (err: any) { alert(err.message); }
     };
+
+    const selectedGigPerformerOptions = selectedGig ? getPerformerOptions(selectedGig) : [];
 
     if (isLoading) {
         return (
@@ -527,7 +592,7 @@ export default function DispatchBoard() {
             </div>
 
             {/* Stats Row */}
-            <div className="grid gap-4 md:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <Card>
                     <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Total Gigs</CardTitle></CardHeader>
                     <CardContent><div className="text-2xl font-bold">{gigs.length}</div></CardContent>
@@ -537,12 +602,32 @@ export default function DispatchBoard() {
                     <CardContent><div className="text-2xl font-bold">{gigs.filter((g) => isSameMonth(new Date(g.startTime), currentMonth)).length}</div></CardContent>
                 </Card>
                 <Card>
+                    <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Pipeline Value</CardTitle></CardHeader>
+                    <CardContent><div className="text-2xl font-bold">{formatCurrency(pipelineValue)}</div></CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Deposits Outstanding</CardTitle></CardHeader>
+                    <CardContent><div className="text-2xl font-bold">{formatCurrency(depositOutstanding)}</div></CardContent>
+                </Card>
+                <Card>
                     <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Clients</CardTitle></CardHeader>
                     <CardContent><div className="text-2xl font-bold">{clients.length}</div></CardContent>
                 </Card>
                 <Card>
                     <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Locations</CardTitle></CardHeader>
                     <CardContent><div className="text-2xl font-bold">{locations.length}</div></CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Unpaid Invoices</CardTitle></CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{user?.role === "ADMIN" ? formatCurrency(outstandingInvoiceValue) : "-"}</div>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Overdue Count</CardTitle></CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{user?.role === "ADMIN" ? overdueInvoiceCount : "-"}</div>
+                    </CardContent>
                 </Card>
             </div>
 
@@ -677,17 +762,25 @@ export default function DispatchBoard() {
                                     )}
                                 </div>
 
-                                {user?.role === "ADMIN" && getAssignablePerformers(selectedGig).length > 0 && (
-                                    <div className="border-t pt-3">
+                                {user?.role === "ADMIN" && selectedGigPerformerOptions.length > 0 && (
+                                    <div className="border-t pt-3 space-y-2">
                                         <Label className="text-xs">Quick Assign Performer</Label>
-                                        <Select onValueChange={(v) => handleAssignPerformer(selectedGig.id, v)}>
+                                        <Select onValueChange={(value) => {
+                                            const selectedOption = selectedGigPerformerOptions.find((option) => option.performer.id === value);
+                                            if (selectedOption?.conflictGig) return;
+                                            handleAssignPerformer(selectedGig.id, value);
+                                        }}>
                                             <SelectTrigger className="mt-1"><SelectValue placeholder="Pick performer..." /></SelectTrigger>
                                             <SelectContent>
-                                                {getAssignablePerformers(selectedGig).map((p: any) => (
-                                                    <SelectItem key={p.id} value={p.id}>{p.user.firstName} {p.user.lastName}</SelectItem>
+                                                {selectedGigPerformerOptions.map(({ performer, conflictGig }) => (
+                                                    <SelectItem key={performer.id} value={performer.id} disabled={Boolean(conflictGig)}>
+                                                        {performer.user.firstName} {performer.user.lastName}
+                                                        {conflictGig ? ` (Unavailable - ${format(new Date(conflictGig.startTime), "MMM d h:mm a")})` : ""}
+                                                    </SelectItem>
                                                 ))}
                                             </SelectContent>
                                         </Select>
+                                        <p className="text-[11px] text-muted-foreground">Unavailable performers are disabled due to overlapping bookings.</p>
                                     </div>
                                 )}
 
@@ -787,8 +880,7 @@ export default function DispatchBoard() {
                                 <p className="text-sm text-muted-foreground">No upcoming gigs.</p>
                             ) : (
                                 <div className="space-y-2">
-                                    {gigs
-                                        .filter((g) => new Date(g.startTime) >= new Date())
+                                    {upcomingGigs
                                         .slice(0, 5)
                                         .map((g) => (
                                             <div
