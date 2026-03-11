@@ -334,7 +334,7 @@ export default function DispatchBoard() {
                                         <Input type="date" value={gigForm.date} onChange={(e) => setGigForm({ ...gigForm, date: e.target.value })} className="mt-1" />
                                         {gigForm.date && (
                                             <p className="text-xs text-primary mt-1 font-medium">
-                                                📅 Selected: {format(new Date(gigForm.date + "T00:00:00"), "EEEE, MMMM d, yyyy")}
+                                                Selected: {format(new Date(gigForm.date + "T00:00:00"), "EEEE, MMMM d, yyyy")}
                                             </p>
                                         )}
                                     </div>
@@ -357,11 +357,11 @@ export default function DispatchBoard() {
                                     </div>
                                     {gigForm.startTime && gigForm.endTime && (
                                         <p className="text-xs text-muted-foreground">
-                                            ⏱ Duration: {(() => {
+                                            Duration: {(() => {
                                                 const [sh, sm] = gigForm.startTime.split(":").map(Number);
                                                 const [eh, em] = gigForm.endTime.split(":").map(Number);
                                                 const mins = (eh * 60 + em) - (sh * 60 + sm);
-                                                if (mins <= 0) return "⚠️ End time must be after start time";
+                                                if (mins <= 0) return "End time must be after start time";
                                                 const hours = Math.floor(mins / 60);
                                                 const remMins = mins % 60;
                                                 return `${hours > 0 ? `${hours}h ` : ""}${remMins > 0 ? `${remMins}m` : ""}`;
@@ -503,7 +503,7 @@ export default function DispatchBoard() {
                             <CardContent className="space-y-4">
                                 <div className="flex items-center gap-2 text-sm">
                                     <Clock className="h-4 w-4 text-muted-foreground" />
-                                    <span>{format(new Date(selectedGig.startTime), "MMM d, yyyy • h:mm a")} – {format(new Date(selectedGig.endTime), "h:mm a")}</span>
+                                    <span>{format(new Date(selectedGig.startTime), "MMM d, yyyy - h:mm a")} to {format(new Date(selectedGig.endTime), "h:mm a")}</span>
                                 </div>
                                 <div className="flex items-center gap-2 text-sm">
                                     <MapPin className="h-4 w-4 text-muted-foreground" />
@@ -613,7 +613,7 @@ export default function DispatchBoard() {
                                             >
                                                 <h4 className="font-medium text-sm">{g.title}</h4>
                                                 <p className="text-xs text-muted-foreground mt-1">
-                                                    {format(new Date(g.startTime), "h:mm a")} – {format(new Date(g.endTime), "h:mm a")}
+                                                    {format(new Date(g.startTime), "h:mm a")} to {format(new Date(g.endTime), "h:mm a")}
                                                 </p>
                                                 <div className="flex gap-1 mt-2">
                                                     <Badge variant="outline" className="text-xs">{g.location?.name}</Badge>
@@ -633,7 +633,7 @@ export default function DispatchBoard() {
                             <CardContent className="text-sm text-muted-foreground space-y-2">
                                 <p>Click on a calendar date to see gigs scheduled for that day.</p>
                                 <p>Use the <strong>"Schedule Gig"</strong> button to create a new booking.</p>
-                                <p className="text-xs">💡 You'll need at least one <strong>Client</strong> and one <strong>Location</strong> before scheduling a gig.</p>
+                                <p className="text-xs">Tip: You need at least one <strong>Client</strong> and one <strong>Location</strong> before scheduling a gig.</p>
                             </CardContent>
                         </Card>
                     )}
@@ -657,7 +657,7 @@ export default function DispatchBoard() {
                                             >
                                                 <div>
                                                     <p className="text-sm font-medium">{g.title}</p>
-                                                    <p className="text-xs text-muted-foreground">{format(new Date(g.startTime), "MMM d • h:mm a")}</p>
+                                                    <p className="text-xs text-muted-foreground">{format(new Date(g.startTime), "MMM d - h:mm a")}</p>
                                                 </div>
                                                 <Badge variant={g.assignments?.length > 0 ? "secondary" : "destructive"} className="text-xs">
                                                     {g.assignments?.length > 0 ? `${g.assignments.length} assigned` : "Unassigned"}

@@ -28,8 +28,7 @@ FROM deps AS builder
 COPY backend/tsconfig.json ./tsconfig.json
 COPY backend/src ./src
 
-RUN npm run build \
-    && npm prune --omit=dev
+RUN npm run build
 
 FROM node:20-alpine AS runner
 
@@ -45,4 +44,4 @@ COPY prisma ../prisma
 
 EXPOSE 5000
 
-CMD ["node", "dist/index.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy || npx prisma db push; node dist/index.js"]

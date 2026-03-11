@@ -78,24 +78,17 @@ export default function InvoicesPage() {
                 const data = await invRes.json();
                 setInvoices(data.data || []);
             }
+
+            if (gigRes.ok) {
+                const data = await gigRes.json();
+                setGigs(data.data || []);
+            }
         } catch (err) {
             console.error("Failed to fetch invoices", err);
         } finally {
             setLoading(false);
         }
-    }, [token, user]);
-
-    // Independent fetch for gigs to avoid double await json error above
-    const fetchGigs = useCallback(async () => {
-        if (!token) return;
-        try {
-            const res = await fetch(`${API}/gigs`, { headers });
-            if (res.ok) {
-                const data = await res.json();
-                setGigs(data.data || []);
-            }
-        } catch (err) { }
-    }, [token]);
+    }, [token, user?.role]);
 
     useEffect(() => {
         if (user && user.role !== 'ADMIN') {
@@ -103,8 +96,8 @@ export default function InvoicesPage() {
             return;
         }
         fetchData();
-        fetchGigs();
-    }, [fetchData, fetchGigs, user, router]);
+    }, [fetchData, user, router]);
+
 
     const handleCreate = async () => {
         setError("");
@@ -183,8 +176,8 @@ export default function InvoicesPage() {
             i.gig.title.toLowerCase().includes(search.toLowerCase())
     );
 
-    // Gigs that don't have an invoice yet
-    const uninvoicedGigs = gigs.filter(g => !invoices.some(inv => inv.gigId === g.id));
+    // Completed gigs that do not have an invoice yet
+    const uninvoicedGigs = gigs.filter((g) => g.status === 'COMPLETED' && !invoices.some((inv) => inv.gigId === g.id));
 
     if (user?.role !== 'ADMIN') return null;
 
@@ -343,3 +336,4 @@ export default function InvoicesPage() {
         </div>
     );
 }
+

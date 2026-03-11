@@ -36,10 +36,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             set({ isLoading: false });
             return;
         }
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
+
         try {
             const res = await fetch(apiUrl('/auth/me'), {
                 headers: { Authorization: `Bearer ${token}` },
+                signal: controller.signal,
             });
+
             if (res.ok) {
                 const data = await res.json();
                 set({ user: data.data.user, isLoading: false });
@@ -50,6 +56,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             }
         } catch {
             set({ isLoading: false });
+        } finally {
+            clearTimeout(timeoutId);
         }
     },
 }));
