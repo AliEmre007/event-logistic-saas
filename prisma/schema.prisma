@@ -22,6 +22,16 @@ enum GigStatus {
   CANCELLED
 }
 
+enum BookingStage {
+  LEAD
+  QUOTED
+  CONTRACT_SENT
+  CONTRACT_SIGNED
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
 enum AssetState {
   AVAILABLE
   IN_USE
@@ -140,15 +150,21 @@ model Gig {
   location    Location  @relation(fields: [locationId], references: [id], onDelete: Restrict)
   companyId   String?
   company     Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
-  status      GigStatus @default(SCHEDULED)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  status          GigStatus    @default(SCHEDULED)
+  stage           BookingStage @default(SCHEDULED)
+  quotedAmount    Decimal?     @db.Decimal(10, 2)
+  depositRequired Decimal?     @db.Decimal(10, 2)
+  depositDueDate  DateTime?
+  depositPaidAt   DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
   assignments GigAssignment[]
   assets      GigAsset[]
   invoice     Invoice?
 
   @@index([companyId])
+  @@index([companyId, stage])
 }
 
 model GigAssignment {
@@ -197,3 +213,4 @@ model Invoice {
 
   @@index([companyId])
 }
+

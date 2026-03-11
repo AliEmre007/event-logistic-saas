@@ -1,5 +1,19 @@
 import { z } from 'zod';
 
+const bookingStageSchema = z.enum([
+    'LEAD',
+    'QUOTED',
+    'CONTRACT_SENT',
+    'CONTRACT_SIGNED',
+    'SCHEDULED',
+    'COMPLETED',
+    'CANCELLED',
+]);
+
+const parseableDateSchema = z.string().refine((value) => !Number.isNaN(Date.parse(value)), {
+    message: 'Invalid date format',
+});
+
 const baseGigShape = {
     title: z.string().trim().min(1, 'Title is required'),
     description: z.string().optional(),
@@ -7,13 +21,33 @@ const baseGigShape = {
     endTime: z.string().datetime({ message: 'Invalid end time format' }),
     clientId: z.string().uuid(),
     locationId: z.string().uuid(),
+    stage: bookingStageSchema.optional(),
+    quotedAmount: z.coerce.number().positive('Quoted amount must be positive').optional(),
+    depositRequired: z.coerce.number().positive('Deposit amount must be positive').optional(),
+    depositDueDate: parseableDateSchema.optional(),
+    depositPaidAt: parseableDateSchema.optional(),
+};
+
+const hasValidTimeWindow = (data: { startTime?: string; endTime?: string }) => {
+    if (!data.startTime || !data.endTime) return true;
+    return new Date(data.startTime) < new Date(data.endTime);
+};
+
+const hasValidDepositRule = (data: { quotedAmount?: number; depositRequired?: number }) => {
+    if (data.quotedAmount === undefined || data.depositRequired === undefined) return true;
+    return data.depositRequired <= data.quotedAmount;
 };
 
 export const createGigSchema = z.object({
-    body: z.object(baseGigShape).refine((data) => new Date(data.startTime) < new Date(data.endTime), {
-        message: 'End time cannot be before start time',
-        path: ['endTime'],
-    }),
+    body: z.object(baseGigShape)
+        .refine((data) => hasValidTimeWindow(data), {
+            message: 'End time cannot be before start time',
+            path: ['endTime'],
+        })
+        .refine((data) => hasValidDepositRule(data), {
+            message: 'Deposit cannot be greater than quoted amount',
+            path: ['depositRequired'],
+        }),
 });
 
 export const updateGigSchema = z.object({
@@ -25,16 +59,22 @@ export const updateGigSchema = z.object({
         clientId: z.string().uuid().optional(),
         locationId: z.string().uuid().optional(),
         status: z.enum(['SCHEDULED', 'COMPLETED', 'CANCELLED']).optional(),
+        stage: bookingStageSchema.optional(),
+        quotedAmount: z.coerce.number().positive('Quoted amount must be positive').optional(),
+        depositRequired: z.coerce.number().positive('Deposit amount must be positive').optional(),
+        depositDueDate: parseableDateSchema.optional(),
+        depositPaidAt: parseableDateSchema.optional(),
     })
         .refine((data) => Object.keys(data).length > 0, {
             message: 'At least one field is required',
         })
-        .refine((data) => {
-            if (!data.startTime || !data.endTime) return true;
-            return new Date(data.startTime) < new Date(data.endTime);
-        }, {
+        .refine((data) => hasValidTimeWindow(data), {
             message: 'End time cannot be before start time',
             path: ['endTime'],
+        })
+        .refine((data) => hasValidDepositRule(data), {
+            message: 'Deposit cannot be greater than quoted amount',
+            path: ['depositRequired'],
         }),
 });
 

@@ -77,6 +77,11 @@ export const createGig = async (data: CreateGigInput, companyId?: string | null)
             endTime: new Date(data.endTime),
             clientId: data.clientId,
             locationId: data.locationId,
+            stage: data.stage,
+            quotedAmount: data.quotedAmount,
+            depositRequired: data.depositRequired,
+            depositDueDate: data.depositDueDate ? new Date(data.depositDueDate) : undefined,
+            depositPaidAt: data.depositPaidAt ? new Date(data.depositPaidAt) : undefined,
             companyId: companyId || undefined,
         },
     });
@@ -219,6 +224,11 @@ export const updateGig = async (id: string, data: UpdateGigInput, companyId?: st
     if (data.clientId !== undefined) updateData.clientId = data.clientId;
     if (data.locationId !== undefined) updateData.locationId = data.locationId;
     if (data.status !== undefined) updateData.status = data.status;
+    if (data.stage !== undefined) updateData.stage = data.stage;
+    if (data.quotedAmount !== undefined) updateData.quotedAmount = data.quotedAmount;
+    if (data.depositRequired !== undefined) updateData.depositRequired = data.depositRequired;
+    if (data.depositDueDate !== undefined) updateData.depositDueDate = new Date(data.depositDueDate);
+    if (data.depositPaidAt !== undefined) updateData.depositPaidAt = new Date(data.depositPaidAt);
 
     return prisma.gig.update({
         where: { id },

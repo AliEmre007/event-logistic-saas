@@ -15,6 +15,37 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar, ChevronLeft, ChevronRight, Plus, Clock, MapPin, Users, Package, X, UserPlus, BoxIcon, Trash2, Edit2, MinusCircle, AlertTriangle } from "lucide-react";
 
 const API = API_BASE_URL;
+const BOOKING_STAGES = ["LEAD", "QUOTED", "CONTRACT_SENT", "CONTRACT_SIGNED", "SCHEDULED", "COMPLETED", "CANCELLED"];
+
+const getGigStage = (gig: any): string => gig.stage || gig.status || "SCHEDULED";
+
+const getStageBadgeClass = (stage: string): string => {
+    switch (stage) {
+        case "LEAD":
+            return "bg-slate-500";
+        case "QUOTED":
+            return "bg-indigo-500";
+        case "CONTRACT_SENT":
+            return "bg-cyan-600";
+        case "CONTRACT_SIGNED":
+            return "bg-emerald-600";
+        case "SCHEDULED":
+            return "bg-blue-600";
+        case "COMPLETED":
+            return "bg-green-600";
+        case "CANCELLED":
+            return "bg-red-600";
+        default:
+            return "bg-gray-500";
+    }
+};
+
+const parseOptionalAmount = (value: string): number | undefined => {
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : undefined;
+};
 
 export default function DispatchBoard() {
     const { token, user } = useAuthStore();
@@ -32,11 +63,24 @@ export default function DispatchBoard() {
     const [showCreateLocation, setShowCreateLocation] = useState(false);
     const [showEditGig, setShowEditGig] = useState(false);
     const [error, setError] = useState("");
+    const [stageFilter, setStageFilter] = useState<string>("ALL");
+
+    const getDefaultGigForm = () => ({
+        title: "",
+        description: "",
+        date: "",
+        startTime: "",
+        endTime: "",
+        clientId: "",
+        locationId: "",
+        stage: "SCHEDULED",
+        quotedAmount: "",
+        depositRequired: "",
+        depositDueDate: "",
+    });
 
     // Create Gig form state
-    const [gigForm, setGigForm] = useState({
-        title: "", description: "", date: "", startTime: "", endTime: "", clientId: "", locationId: "",
-    });
+    const [gigForm, setGigForm] = useState(getDefaultGigForm());
     // Create Client form state
     const [clientForm, setClientForm] = useState({
         name: "", companyName: "", email: "", phone: "", billingAddress: "",
@@ -55,6 +99,10 @@ export default function DispatchBoard() {
             endTime: format(new Date(gig.endTime), "HH:mm"),
             clientId: gig.clientId,
             locationId: gig.locationId,
+            stage: getGigStage(gig),
+            quotedAmount: gig.quotedAmount?.toString() || "",
+            depositRequired: gig.depositRequired?.toString() || "",
+            depositDueDate: gig.depositDueDate ? format(new Date(gig.depositDueDate), "yyyy-MM-dd") : "",
         });
         setShowEditGig(true);
     };
@@ -103,7 +151,11 @@ export default function DispatchBoard() {
     const startPadding = monthStart.getDay();
     const paddedDays: (Date | null)[] = [...Array(startPadding).fill(null), ...daysInMonth];
 
-    const gigsOnDay = (day: Date) => gigs.filter((g) => isSameDay(new Date(g.startTime), day));
+    const matchesStageFilter = (gig: any) => stageFilter === "ALL" || getGigStage(gig) === stageFilter;
+
+    const gigsOnDay = (day: Date) => gigs.filter((g) => isSameDay(new Date(g.startTime), day) && matchesStageFilter(g));
+
+    const upcomingGigs = gigs.filter((g) => new Date(g.startTime) >= new Date() && matchesStageFilter(g));
 
     const refreshSelectedGig = async (gigId: string) => {
         const res = await fetch(`${API}/gigs/${gigId}`, { headers });
@@ -129,6 +181,10 @@ export default function DispatchBoard() {
                 endTime: new Date(`${gigForm.date}T${gigForm.endTime}`).toISOString(),
                 clientId: gigForm.clientId,
                 locationId: gigForm.locationId,
+                stage: gigForm.stage,
+                quotedAmount: parseOptionalAmount(gigForm.quotedAmount),
+                depositRequired: parseOptionalAmount(gigForm.depositRequired),
+                depositDueDate: gigForm.depositDueDate ? new Date(`${gigForm.depositDueDate}T00:00:00`).toISOString() : undefined,
             };
             const res = await fetch(`${API}/gigs`, {
                 method: "POST", headers, body: JSON.stringify(payload),
@@ -136,7 +192,7 @@ export default function DispatchBoard() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.message || "Failed to create gig");
             setShowCreateGig(false);
-            setGigForm({ title: "", description: "", date: "", startTime: "", endTime: "", clientId: "", locationId: "" });
+            setGigForm(getDefaultGigForm());
             await fetchAll();
         } catch (err: any) { setError(err.message); }
     };
@@ -211,6 +267,10 @@ export default function DispatchBoard() {
                 endTime: new Date(`${gigForm.date}T${gigForm.endTime}`).toISOString(),
                 clientId: gigForm.clientId,
                 locationId: gigForm.locationId,
+                stage: gigForm.stage,
+                quotedAmount: parseOptionalAmount(gigForm.quotedAmount),
+                depositRequired: parseOptionalAmount(gigForm.depositRequired),
+                depositDueDate: gigForm.depositDueDate ? new Date(`${gigForm.depositDueDate}T00:00:00`).toISOString() : undefined,
             };
             const res = await fetch(`${API}/gigs/${selectedGig.id}`, {
                 method: "PUT", headers, body: JSON.stringify(payload),
@@ -221,6 +281,24 @@ export default function DispatchBoard() {
             await fetchAll();
             setSelectedGig(data.data);
         } catch (err: any) { setError(err.message); }
+    };
+
+    // --- Mark Deposit Paid ---
+    const handleMarkDepositPaid = async (gigId: string) => {
+        setError("");
+        try {
+            const res = await fetch(`${API}/gigs/${gigId}`, {
+                method: "PUT",
+                headers,
+                body: JSON.stringify({ depositPaidAt: new Date().toISOString() }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.message || "Failed to mark deposit as paid");
+            await fetchAll();
+            await refreshSelectedGig(gigId);
+        } catch (err: any) {
+            setError(err.message);
+        }
     };
 
     // --- Delete Gig ---
@@ -279,6 +357,20 @@ export default function DispatchBoard() {
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight">Dispatch Board</h1>
                     <p className="text-muted-foreground">Schedule gigs and assign talent & equipment.</p>
+                    <div className="mt-3 w-[230px]">
+                        <Label className="text-xs text-muted-foreground">Filter by Booking Stage</Label>
+                        <Select value={stageFilter} onValueChange={setStageFilter}>
+                            <SelectTrigger className="mt-1 h-8">
+                                <SelectValue placeholder="All stages" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="ALL">All stages</SelectItem>
+                                {BOOKING_STAGES.map((stage) => (
+                                    <SelectItem key={stage} value={stage}>{stage.replace(/_/g, " ")}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
                 </div>
                 {user?.role === "ADMIN" && (
                     <div className="flex gap-2">
@@ -368,6 +460,33 @@ export default function DispatchBoard() {
                                             })()}
                                         </p>
                                     )}
+                                    <div>
+                                        <Label>Booking Stage</Label>
+                                        <Select value={gigForm.stage} onValueChange={(v) => setGigForm({ ...gigForm, stage: v })}>
+                                            <SelectTrigger className="mt-1">
+                                                <SelectValue placeholder="Choose stage" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {BOOKING_STAGES.map((stage) => (
+                                                    <SelectItem key={stage} value={stage}>{stage.replace(/_/g, " ")}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <Label>Quoted Amount</Label>
+                                            <Input type="number" min="0" step="0.01" value={gigForm.quotedAmount} onChange={(e) => setGigForm({ ...gigForm, quotedAmount: e.target.value })} className="mt-1" placeholder="1200" />
+                                        </div>
+                                        <div>
+                                            <Label>Deposit Required</Label>
+                                            <Input type="number" min="0" step="0.01" value={gigForm.depositRequired} onChange={(e) => setGigForm({ ...gigForm, depositRequired: e.target.value })} className="mt-1" placeholder="300" />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <Label>Deposit Due Date</Label>
+                                        <Input type="date" value={gigForm.depositDueDate} onChange={(e) => setGigForm({ ...gigForm, depositDueDate: e.target.value })} className="mt-1" />
+                                    </div>
                                     <div>
                                         <Label>Client *</Label>
                                         {clients.length === 0 ? (
@@ -468,7 +587,8 @@ export default function DispatchBoard() {
                                                 onClick={(e) => { e.stopPropagation(); setSelectedGig(g); setSelectedDate(new Date(g.startTime)); }}
                                                 className="text-xs truncate rounded bg-primary/10 text-primary px-1 py-0.5 mb-0.5 cursor-pointer hover:bg-primary/20 transition-colors"
                                             >
-                                                {g.title}
+                                                <span className="truncate">{g.title}</span>
+                                                <span className="ml-1 text-[10px] uppercase opacity-70">{getGigStage(g).replace(/_/g, " ")}</span>
                                             </div>
                                         ))}
                                         {dayGigs.length > 2 && (
@@ -513,6 +633,26 @@ export default function DispatchBoard() {
                                     <Users className="h-4 w-4 text-muted-foreground" />
                                     <span>Client: {selectedGig.client?.name || "Unknown"}</span>
                                 </div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <Badge className={`${getStageBadgeClass(getGigStage(selectedGig))} text-white`}>{getGigStage(selectedGig).replace(/_/g, " ")}</Badge>
+                                    {selectedGig.quotedAmount && (
+                                        <Badge variant="outline">Quote: ${Number(selectedGig.quotedAmount).toFixed(2)}</Badge>
+                                    )}
+                                    {selectedGig.depositRequired && (
+                                        <Badge variant="outline">Deposit: ${Number(selectedGig.depositRequired).toFixed(2)}</Badge>
+                                    )}
+                                </div>
+                                {selectedGig.depositDueDate && (
+                                    <p className="text-xs text-muted-foreground">
+                                        Deposit due: {format(new Date(selectedGig.depositDueDate), "MMM d, yyyy")}
+                                        {selectedGig.depositPaidAt ? ` (paid ${format(new Date(selectedGig.depositPaidAt), "MMM d, yyyy")})` : ""}
+                                    </p>
+                                )}
+                                {user?.role === "ADMIN" && selectedGig.depositRequired && !selectedGig.depositPaidAt && (
+                                    <Button variant="outline" size="sm" className="w-fit" onClick={() => handleMarkDepositPaid(selectedGig.id)}>
+                                        Mark Deposit Paid
+                                    </Button>
+                                )}
 
                                 {/* Assigned Performers */}
                                 <div className="border-t pt-3">
@@ -615,8 +755,9 @@ export default function DispatchBoard() {
                                                 <p className="text-xs text-muted-foreground mt-1">
                                                     {format(new Date(g.startTime), "h:mm a")} to {format(new Date(g.endTime), "h:mm a")}
                                                 </p>
-                                                <div className="flex gap-1 mt-2">
+                                                <div className="flex gap-1 mt-2 flex-wrap">
                                                     <Badge variant="outline" className="text-xs">{g.location?.name}</Badge>
+                                                    <Badge className={`${getStageBadgeClass(getGigStage(g))} text-xs text-white`}>{getGigStage(g).replace(/_/g, " ")}</Badge>
                                                     <Badge variant="secondary" className="text-xs">{g.assignments?.length || 0} performers</Badge>
                                                 </div>
                                             </div>
@@ -642,7 +783,7 @@ export default function DispatchBoard() {
                     <Card>
                         <CardHeader><CardTitle className="text-sm font-medium">Upcoming Gigs</CardTitle></CardHeader>
                         <CardContent>
-                            {gigs.filter((g) => new Date(g.startTime) >= new Date()).length === 0 ? (
+                            {upcomingGigs.length === 0 ? (
                                 <p className="text-sm text-muted-foreground">No upcoming gigs.</p>
                             ) : (
                                 <div className="space-y-2">
@@ -659,9 +800,14 @@ export default function DispatchBoard() {
                                                     <p className="text-sm font-medium">{g.title}</p>
                                                     <p className="text-xs text-muted-foreground">{format(new Date(g.startTime), "MMM d - h:mm a")}</p>
                                                 </div>
-                                                <Badge variant={g.assignments?.length > 0 ? "secondary" : "destructive"} className="text-xs">
-                                                    {g.assignments?.length > 0 ? `${g.assignments.length} assigned` : "Unassigned"}
-                                                </Badge>
+                                                <div className="flex flex-col items-end gap-1">
+                                                    <Badge className={`${getStageBadgeClass(getGigStage(g))} text-[10px] text-white`}>
+                                                        {getGigStage(g).replace(/_/g, " ")}
+                                                    </Badge>
+                                                    <Badge variant={g.assignments?.length > 0 ? "secondary" : "destructive"} className="text-xs">
+                                                        {g.assignments?.length > 0 ? `${g.assignments.length} assigned` : "Unassigned"}
+                                                    </Badge>
+                                                </div>
                                             </div>
                                         ))}
                                 </div>
@@ -712,6 +858,29 @@ export default function DispatchBoard() {
                                     {locations.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
                                 </SelectContent>
                             </Select>
+                        </div>
+                        <div>
+                            <Label>Booking Stage</Label>
+                            <Select value={gigForm.stage} onValueChange={(v) => setGigForm({ ...gigForm, stage: v })}>
+                                <SelectTrigger><SelectValue placeholder="Select stage" /></SelectTrigger>
+                                <SelectContent>
+                                    {BOOKING_STAGES.map((stage) => <SelectItem key={stage} value={stage}>{stage.replace(/_/g, " ")}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <Label>Quoted Amount</Label>
+                                <Input type="number" min="0" step="0.01" value={gigForm.quotedAmount} onChange={(e) => setGigForm({ ...gigForm, quotedAmount: e.target.value })} />
+                            </div>
+                            <div>
+                                <Label>Deposit Required</Label>
+                                <Input type="number" min="0" step="0.01" value={gigForm.depositRequired} onChange={(e) => setGigForm({ ...gigForm, depositRequired: e.target.value })} />
+                            </div>
+                        </div>
+                        <div>
+                            <Label>Deposit Due Date</Label>
+                            <Input type="date" value={gigForm.depositDueDate} onChange={(e) => setGigForm({ ...gigForm, depositDueDate: e.target.value })} />
                         </div>
                         <div>
                             <Label>Description</Label>
