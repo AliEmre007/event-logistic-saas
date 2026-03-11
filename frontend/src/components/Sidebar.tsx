@@ -14,6 +14,8 @@ export function Sidebar() {
         router.push("/login");
     };
 
+    const isAdmin = user?.role === "ADMIN";
+
     return (
         <div className="flex h-screen w-64 flex-col border-r bg-card text-card-foreground">
             <div className="flex h-14 items-center border-b px-4">
@@ -29,23 +31,27 @@ export function Sidebar() {
                         <Package className="h-4 w-4" />
                         Inventory & Assets
                     </Link>
-                    <Link href="/dashboard/clients" className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary">
-                        <Users className="h-4 w-4" />
-                        Clients
-                    </Link>
-                    <Link href="/dashboard/locations" className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary">
-                        <MapPin className="h-4 w-4" />
-                        Locations
-                    </Link>
-                    <Link href="/dashboard/performers" className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary">
-                        <Mic2 className="h-4 w-4" />
-                        Performers
-                    </Link>
-                    <Link href="/dashboard/invoices" className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary">
-                        <FileText className="h-4 w-4" />
-                        Invoicing
-                    </Link>
 
+                    {isAdmin && (
+                        <>
+                            <Link href="/dashboard/clients" className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary">
+                                <Users className="h-4 w-4" />
+                                Clients
+                            </Link>
+                            <Link href="/dashboard/locations" className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary">
+                                <MapPin className="h-4 w-4" />
+                                Locations
+                            </Link>
+                            <Link href="/dashboard/performers" className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary">
+                                <Mic2 className="h-4 w-4" />
+                                Performers
+                            </Link>
+                            <Link href="/dashboard/invoices" className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary">
+                                <FileText className="h-4 w-4" />
+                                Invoicing
+                            </Link>
+                        </>
+                    )}
                 </nav>
             </div>
             <div className="border-t p-4">

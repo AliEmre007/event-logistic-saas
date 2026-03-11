@@ -2,23 +2,29 @@ import { prisma } from '../lib/prisma';
 import { NotFoundError, BadRequestError } from '../utils/errors';
 import { CreateAssetInput, UpdateAssetInput, UpdateAssetStateInput } from '../schema/asset.schema';
 
-export const getAllAssets = async () => {
-    return await prisma.asset.findMany({
+const companyScope = (companyId?: string | null) => (companyId ? { companyId } : {});
+
+export const getAllAssets = async (companyId?: string | null) => {
+    return prisma.asset.findMany({
+        where: companyScope(companyId),
         include: { location: true },
         orderBy: { name: 'asc' },
     });
 };
 
-export const getAssetById = async (id: string) => {
-    const asset = await prisma.asset.findUnique({
-        where: { id },
+export const getAssetById = async (id: string, companyId?: string | null) => {
+    const asset = await prisma.asset.findFirst({
+        where: {
+            id,
+            ...companyScope(companyId),
+        },
         include: { location: true, gigAssets: { include: { gig: true } } },
     });
     if (!asset) throw new NotFoundError('Asset not found');
     return asset;
 };
 
-export const createAsset = async (data: CreateAssetInput) => {
+export const createAsset = async (data: CreateAssetInput, companyId?: string | null) => {
     try {
         return await prisma.asset.create({
             data: {
@@ -26,6 +32,7 @@ export const createAsset = async (data: CreateAssetInput) => {
                 sku: data.sku,
                 category: data.category,
                 locationId: data.locationId,
+                companyId: companyId || undefined,
             },
             include: { location: true },
         });
@@ -37,9 +44,8 @@ export const createAsset = async (data: CreateAssetInput) => {
     }
 };
 
-export const updateAsset = async (id: string, data: UpdateAssetInput) => {
-    const asset = await prisma.asset.findUnique({ where: { id } });
-    if (!asset) throw new NotFoundError('Asset not found');
+export const updateAsset = async (id: string, data: UpdateAssetInput, companyId?: string | null) => {
+    await getAssetById(id, companyId);
 
     const updateData: Record<string, unknown> = {};
     if (data.name !== undefined) updateData.name = data.name;
@@ -62,22 +68,26 @@ export const updateAsset = async (id: string, data: UpdateAssetInput) => {
     }
 };
 
-export const updateAssetState = async (id: string, data: UpdateAssetStateInput) => {
-    const asset = await prisma.asset.findUnique({ where: { id } });
-    if (!asset) throw new NotFoundError('Asset not found');
+export const updateAssetState = async (id: string, data: UpdateAssetStateInput, companyId?: string | null) => {
+    await getAssetById(id, companyId);
 
-    return await prisma.asset.update({
+    return prisma.asset.update({
         where: { id },
         data: { state: data.state },
     });
 };
 
-export const deleteAsset = async (id: string) => {
-    const asset = await prisma.asset.findUnique({ where: { id } });
-    if (!asset) throw new NotFoundError('Asset not found');
+export const deleteAsset = async (id: string, companyId?: string | null) => {
+    await getAssetById(id, companyId);
 
     // Check if asset is currently assigned to any gig
-    const assignedCount = await prisma.gigAsset.count({ where: { assetId: id } });
+    const assignedCount = await prisma.gigAsset.count({
+        where: {
+            assetId: id,
+            gig: companyScope(companyId),
+        },
+    });
+
     if (assignedCount > 0) {
         throw new BadRequestError(`Cannot delete asset: assigned to ${assignedCount} gig(s). Remove assignments first.`);
     }

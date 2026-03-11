@@ -8,6 +8,7 @@ export const registerSchema = z.object({
         lastName: z.string().min(1, { message: 'Last name is required' }),
         phone: z.string().optional(),
         skills: z.array(z.string()).optional(),
+        companyName: z.string().trim().min(2, { message: 'Company name must be at least 2 characters' }).optional(),
     }),
 });
 

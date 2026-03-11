@@ -1,8 +1,9 @@
 import { prisma } from '../lib/prisma';
 import { NotFoundError, ConflictError, BadRequestError } from '../utils/errors';
 
-export const getAllPerformers = async () => {
-    return await prisma.performerProfile.findMany({
+export const getAllPerformers = async (companyId?: string | null) => {
+    return prisma.performerProfile.findMany({
+        where: companyId ? { user: { companyId } } : {},
         include: {
             user: {
                 select: {
@@ -12,6 +13,7 @@ export const getAllPerformers = async () => {
                     lastName: true,
                     phone: true,
                     role: true,
+                    companyId: true,
                 },
             },
         },
@@ -19,9 +21,12 @@ export const getAllPerformers = async () => {
     });
 };
 
-export const getPerformerById = async (id: string) => {
-    const performer = await prisma.performerProfile.findUnique({
-        where: { id },
+export const getPerformerById = async (id: string, companyId?: string | null) => {
+    const performer = await prisma.performerProfile.findFirst({
+        where: {
+            id,
+            ...(companyId ? { user: { companyId } } : {}),
+        },
         include: {
             user: {
                 select: {
@@ -30,6 +35,7 @@ export const getPerformerById = async (id: string) => {
                     firstName: true,
                     lastName: true,
                     phone: true,
+                    companyId: true,
                 },
             },
             gigAssignments: {
@@ -50,9 +56,15 @@ export const getPerformerById = async (id: string) => {
     return performer;
 };
 
-export const createPerformer = async (data: { userId: string; skills: string[] }) => {
-    // Check if user exists
-    const user = await prisma.user.findUnique({ where: { id: data.userId } });
+export const createPerformer = async (data: { userId: string; skills: string[] }, companyId?: string | null) => {
+    // Check if user exists in company scope
+    const user = await prisma.user.findFirst({
+        where: {
+            id: data.userId,
+            ...(companyId ? { companyId } : {}),
+        },
+    });
+
     if (!user) throw new NotFoundError('User not found');
     if (user.role !== 'PERFORMER') {
         throw new BadRequestError('Only users with PERFORMER role can have a performer profile');
@@ -62,7 +74,7 @@ export const createPerformer = async (data: { userId: string; skills: string[] }
     const existing = await prisma.performerProfile.findUnique({ where: { userId: data.userId } });
     if (existing) throw new ConflictError('User already has a performer profile');
 
-    return await prisma.performerProfile.create({
+    return prisma.performerProfile.create({
         data: {
             userId: data.userId,
             skills: data.skills,
@@ -71,26 +83,27 @@ export const createPerformer = async (data: { userId: string; skills: string[] }
     });
 };
 
-export const updatePerformer = async (id: string, data: { skills?: string[]; active?: boolean }) => {
-    const performer = await prisma.performerProfile.findUnique({ where: { id } });
-    if (!performer) throw new NotFoundError('Performer not found');
+export const updatePerformer = async (id: string, data: { skills?: string[]; active?: boolean }, companyId?: string | null) => {
+    await getPerformerById(id, companyId);
 
-    return await prisma.performerProfile.update({
+    return prisma.performerProfile.update({
         where: { id },
         data,
         include: { user: true },
     });
 };
 
-export const deletePerformer = async (id: string) => {
-    const performer = await prisma.performerProfile.findUnique({ where: { id } });
-    if (!performer) throw new NotFoundError('Performer not found');
+export const deletePerformer = async (id: string, companyId?: string | null) => {
+    await getPerformerById(id, companyId);
 
     // Check for active/future gig assignments
     const futureAssignments = await prisma.gigAssignment.count({
         where: {
             performerProfileId: id,
-            gig: { startTime: { gt: new Date() } },
+            gig: {
+                startTime: { gt: new Date() },
+                ...(companyId ? { companyId } : {}),
+            },
         },
     });
 

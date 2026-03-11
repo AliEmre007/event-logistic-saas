@@ -1,14 +1,23 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { Role } from '@prisma/client';
+import { Prisma, Role } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { BadRequestError, UnauthorizedError } from '../utils/errors';
 import { RegisterInput, LoginInput } from '../schema/auth.schema';
 import { getJwtSecret } from '../config/env';
 
-const signToken = (id: string, role: string) => {
-    return jwt.sign({ id, role }, getJwtSecret(), {
+const signToken = (id: string, role: string, companyId?: string | null) => {
+    return jwt.sign({ id, role, companyId: companyId || null }, getJwtSecret(), {
         expiresIn: '7d',
+    });
+};
+
+const getOrCreateDefaultCompany = async (tx: Prisma.TransactionClient) => {
+    const existing = await tx.company.findFirst({ orderBy: { createdAt: 'asc' } });
+    if (existing) return existing;
+
+    return tx.company.create({
+        data: { name: 'Default Entertainment Company' },
     });
 };
 
@@ -24,9 +33,25 @@ export const registerUser = async (data: RegisterInput) => {
     const hashedPassword = await bcrypt.hash(data.password, 12);
 
     const newUser = await prisma.$transaction(async (tx) => {
-        // Bootstrap rule: only the first account can become ADMIN.
-        const adminCount = await tx.user.count({ where: { role: 'ADMIN' } });
-        const assignedRole: Role = adminCount === 0 ? 'ADMIN' : 'PERFORMER';
+        const trimmedCompanyName = data.companyName?.trim();
+
+        let companyId: string;
+        let assignedRole: Role;
+
+        if (trimmedCompanyName) {
+            const company = await tx.company.create({
+                data: { name: trimmedCompanyName },
+            });
+            companyId = company.id;
+            assignedRole = 'ADMIN';
+        } else {
+            const company = await getOrCreateDefaultCompany(tx);
+            companyId = company.id;
+
+            // Bootstrap rule per company: first account becomes ADMIN.
+            const adminCount = await tx.user.count({ where: { companyId, role: 'ADMIN' } });
+            assignedRole = adminCount === 0 ? 'ADMIN' : 'PERFORMER';
+        }
 
         const user = await tx.user.create({
             data: {
@@ -36,6 +61,7 @@ export const registerUser = async (data: RegisterInput) => {
                 lastName: data.lastName,
                 phone: data.phone,
                 role: assignedRole,
+                companyId,
             },
             select: {
                 id: true,
@@ -43,6 +69,13 @@ export const registerUser = async (data: RegisterInput) => {
                 firstName: true,
                 lastName: true,
                 role: true,
+                companyId: true,
+                company: {
+                    select: {
+                        id: true,
+                        name: true,
+                    },
+                },
             },
         });
 
@@ -58,20 +91,28 @@ export const registerUser = async (data: RegisterInput) => {
         return user;
     });
 
-    const token = signToken(newUser.id, newUser.role);
+    const token = signToken(newUser.id, newUser.role, newUser.companyId);
     return { user: newUser, token };
 };
 
 export const loginUser = async (data: LoginInput) => {
     const user = await prisma.user.findUnique({
         where: { email: data.email },
+        include: {
+            company: {
+                select: {
+                    id: true,
+                    name: true,
+                },
+            },
+        },
     });
 
     if (!user || !(await bcrypt.compare(data.password, user.password))) {
         throw new UnauthorizedError('Incorrect email or password');
     }
 
-    const token = signToken(user.id, user.role);
+    const token = signToken(user.id, user.role, user.companyId);
 
     const { password, ...userWithoutPassword } = user;
     return { user: userWithoutPassword, token };
@@ -82,6 +123,12 @@ export const getMe = async (userId: string) => {
         where: { id: userId },
         include: {
             performerProfile: true,
+            company: {
+                select: {
+                    id: true,
+                    name: true,
+                },
+            },
         },
     });
 

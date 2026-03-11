@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
 import { API_BASE_URL } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -55,7 +56,8 @@ interface UserSummary {
 }
 
 export default function PerformersPage() {
-    const { token } = useAuthStore();
+    const { token, user } = useAuthStore();
+    const router = useRouter();
     const [performers, setPerformers] = useState<Performer[]>([]);
     const [users, setUsers] = useState<UserSummary[]>([]);
     const [loading, setLoading] = useState(true);
@@ -105,8 +107,12 @@ export default function PerformersPage() {
     }, [token]);
 
     useEffect(() => {
+        if (user && user.role !== 'ADMIN') {
+            router.push('/dashboard');
+            return;
+        }
         fetchData();
-    }, [fetchData]);
+    }, [fetchData, user, router]);
 
     const handleCreate = async () => {
         setError("");
@@ -180,6 +186,8 @@ export default function PerformersPage() {
         });
         setIsEditOpen(true);
     };
+
+    if (user?.role !== 'ADMIN') return null;
 
     const filteredPerformers = performers.filter(
         (p) =>
@@ -399,3 +407,6 @@ export default function PerformersPage() {
         </div>
     );
 }
+
+
+

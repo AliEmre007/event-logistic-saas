@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
 import { API_BASE_URL } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -43,7 +44,8 @@ interface Client {
 }
 
 export default function ClientsPage() {
-    const { token } = useAuthStore();
+    const { token, user } = useAuthStore();
+    const router = useRouter();
     const [clients, setClients] = useState<Client[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState("");
@@ -83,8 +85,12 @@ export default function ClientsPage() {
     }, [token]);
 
     useEffect(() => {
+        if (user && user.role !== 'ADMIN') {
+            router.push('/dashboard');
+            return;
+        }
         fetchClients();
-    }, [fetchClients]);
+    }, [fetchClients, user, router]);
 
     const handleCreate = async () => {
         setError("");
@@ -150,6 +156,8 @@ export default function ClientsPage() {
         });
         setIsEditOpen(true);
     };
+
+    if (user?.role !== 'ADMIN') return null;
 
     const filteredClients = clients.filter(
         (c) =>
@@ -379,3 +387,6 @@ export default function ClientsPage() {
         </div>
     );
 }
+
+
+

@@ -12,6 +12,7 @@ export default function RegisterPage() {
     const [formData, setFormData] = useState({
         firstName: "",
         lastName: "",
+        companyName: "",
         email: "",
         password: "",
     });
@@ -30,11 +31,16 @@ export default function RegisterPage() {
         setIsLoading(true);
         setError("");
 
+        const payload = {
+            ...formData,
+            companyName: formData.companyName.trim() || undefined,
+        };
+
         try {
-            const res = await fetch(apiUrl('/auth/register'), {
+            const res = await fetch(apiUrl("/auth/register"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(formData),
+                body: JSON.stringify(payload),
             });
 
             const data = await res.json();
@@ -54,19 +60,19 @@ export default function RegisterPage() {
 
     return (
         <div className="flex min-h-screen items-center justify-center bg-gray-50">
-            <div className="w-full max-w-md space-y-8 rounded-xl bg-white p-10 shadow-lg border border-gray-100">
+            <div className="w-full max-w-md space-y-8 rounded-xl border border-gray-100 bg-white p-10 shadow-lg">
                 <div className="text-center">
                     <h2 className="mt-6 text-3xl font-bold tracking-tight text-gray-900">
                         Create an Account
                     </h2>
                     <p className="mt-2 text-sm text-gray-600">
-                        The first registered account becomes admin automatically.
+                        Add your company name to create a new workspace as admin.
                     </p>
                 </div>
 
                 <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
                     {error && (
-                        <div className="rounded-md bg-red-50 p-4 text-sm text-red-700 border border-red-200">
+                        <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">
                             {error}
                         </div>
                     )}
@@ -95,6 +101,16 @@ export default function RegisterPage() {
                     </div>
 
                     <div>
+                        <label className="mb-1 block text-sm font-medium text-gray-700">Company Name (optional)</label>
+                        <Input
+                            name="companyName"
+                            value={formData.companyName}
+                            onChange={handleChange}
+                            placeholder="Acme Entertainment"
+                        />
+                    </div>
+
+                    <div>
                         <label className="mb-1 block text-sm font-medium text-gray-700">Email address</label>
                         <Input
                             name="email"
@@ -118,7 +134,7 @@ export default function RegisterPage() {
                         />
                     </div>
 
-                    <Button type="submit" className="w-full mt-6" disabled={isLoading}>
+                    <Button type="submit" className="mt-6 w-full" disabled={isLoading}>
                         {isLoading ? "Creating account..." : "Register"}
                     </Button>
                 </form>

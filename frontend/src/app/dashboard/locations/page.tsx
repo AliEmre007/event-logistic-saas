@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
 import { API_BASE_URL } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -40,7 +41,8 @@ interface Location {
 }
 
 export default function LocationsPage() {
-    const { token } = useAuthStore();
+    const { token, user } = useAuthStore();
+    const router = useRouter();
     const [locations, setLocations] = useState<Location[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState("");
@@ -77,8 +79,12 @@ export default function LocationsPage() {
     }, [token]);
 
     useEffect(() => {
+        if (user && user.role !== 'ADMIN') {
+            router.push('/dashboard');
+            return;
+        }
         fetchLocations();
-    }, [fetchLocations]);
+    }, [fetchLocations, user, router]);
 
     const handleCreate = async () => {
         setError("");
@@ -141,6 +147,8 @@ export default function LocationsPage() {
         });
         setIsEditOpen(true);
     };
+
+    if (user?.role !== 'ADMIN') return null;
 
     const filteredLocations = locations.filter(
         (l) =>
@@ -310,3 +318,6 @@ export default function LocationsPage() {
         </div>
     );
 }
+
+
+

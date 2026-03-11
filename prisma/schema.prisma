@@ -3,6 +3,7 @@
 
 generator client {
   provider = "prisma-client-js"
+  output   = "../backend/node_modules/.prisma/client"
 }
 
 datasource db {
@@ -13,6 +14,12 @@ datasource db {
 enum Role {
   ADMIN
   PERFORMER
+}
+
+enum GigStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
 }
 
 enum AssetState {
@@ -28,6 +35,20 @@ enum InvoiceStatus {
   OVERDUE
 }
 
+model Company {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users     User[]
+  clients   Client[]
+  locations Location[]
+  assets    Asset[]
+  gigs      Gig[]
+  invoices  Invoice[]
+}
+
 model User {
   id        String   @id @default(uuid())
   email     String   @unique
@@ -36,10 +57,14 @@ model User {
   firstName String
   lastName  String
   phone     String?
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   performerProfile PerformerProfile?
+
+  @@index([companyId])
 }
 
 model PerformerProfile {
@@ -48,7 +73,7 @@ model PerformerProfile {
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   skills         String[] // e.g., ["Face Painting", "Mascot", "Balloon Animals"]
   active         Boolean  @default(true)
-  
+
   gigAssignments GigAssignment[]
 }
 
@@ -59,22 +84,30 @@ model Client {
   email          String    @unique
   phone          String?
   billingAddress String?
+  companyId      String?
+  company        Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
   gigs           Gig[]
   invoices       Invoice[]
+
+  @@index([companyId])
 }
 
 model Location {
   id        String   @id @default(uuid())
   name      String
   address   String
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   gigs      Gig[]
   assets    Asset[]  @relation("AssetLocation") // Current location of asset
+
+  @@index([companyId])
 }
 
 model Asset {
@@ -85,29 +118,37 @@ model Asset {
   state       AssetState @default(AVAILABLE)
   locationId  String?
   location    Location?  @relation("AssetLocation", fields: [locationId], references: [id], onDelete: SetNull)
+  companyId   String?
+  company     Company?   @relation(fields: [companyId], references: [id], onDelete: SetNull)
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
   gigAssets   GigAsset[]
+
+  @@index([companyId])
 }
 
 model Gig {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   title       String
   description String?
   startTime   DateTime
   endTime     DateTime
   clientId    String
-  client      Client   @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  client      Client    @relation(fields: [clientId], references: [id], onDelete: Restrict)
   locationId  String
-  location    Location @relation(fields: [locationId], references: [id], onDelete: Restrict)
-  status      String   @default("SCHEDULED") // SCHEDULED, COMPLETED, CANCELLED
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  location    Location  @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  companyId   String?
+  company     Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  status      GigStatus @default(SCHEDULED)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   assignments GigAssignment[]
   assets      GigAsset[]
   invoice     Invoice?
+
+  @@index([companyId])
 }
 
 model GigAssignment {
@@ -137,18 +178,22 @@ model GigAsset {
 }
 
 model Invoice {
-  id            String        @id @default(uuid())
-  gigId         String        @unique
-  gig           Gig           @relation(fields: [gigId], references: [id], onDelete: Restrict)
-  clientId      String
-  client        Client        @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  amount        Decimal       @db.Decimal(10, 2)
-  status        InvoiceStatus @default(PENDING)
-  issuedAt      DateTime      @default(now())
-  dueDate       DateTime
-  paidAt        DateTime?
-  pdfUrl        String?       // URL to generated PDF invoice
-  billingDetails String?      // Snapshot of billing address at time of issue
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  id             String        @id @default(uuid())
+  gigId          String        @unique
+  gig            Gig           @relation(fields: [gigId], references: [id], onDelete: Restrict)
+  clientId       String
+  client         Client        @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  companyId      String?
+  company        Company?      @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  amount         Decimal       @db.Decimal(10, 2)
+  status         InvoiceStatus @default(PENDING)
+  issuedAt       DateTime      @default(now())
+  dueDate        DateTime
+  paidAt         DateTime?
+  pdfUrl         String?       // URL to generated PDF invoice
+  billingDetails String?       // Snapshot of billing address at time of issue
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([companyId])
 }

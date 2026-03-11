@@ -11,6 +11,7 @@ declare global {
             user?: {
                 id: string;
                 role: string;
+                companyId?: string | null;
             };
         }
     }
@@ -37,12 +38,12 @@ export const authenticate = async (
         }
 
         // Verify token
-        const decoded = jwt.verify(token, getJwtSecret()) as { id: string; role: string };
+        const decoded = jwt.verify(token, getJwtSecret()) as { id: string; role: string; companyId?: string | null };
 
         // Check if user still exists
         const currentUser = await prisma.user.findUnique({
             where: { id: decoded.id },
-            select: { id: true, role: true },
+            select: { id: true, role: true, companyId: true },
         });
 
         if (!currentUser) {

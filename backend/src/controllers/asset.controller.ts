@@ -3,7 +3,7 @@ import * as assetService from '../services/asset.service';
 
 export const getAllAssets = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const assets = await assetService.getAllAssets();
+        const assets = await assetService.getAllAssets(req.user?.companyId);
         res.status(200).json({ status: 'success', data: assets });
     } catch (error) {
         next(error);
@@ -12,7 +12,7 @@ export const getAllAssets = async (req: Request, res: Response, next: NextFuncti
 
 export const getAssetById = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const asset = await assetService.getAssetById(req.params.id);
+        const asset = await assetService.getAssetById(req.params.id, req.user?.companyId);
         res.status(200).json({ status: 'success', data: asset });
     } catch (error) {
         next(error);
@@ -21,7 +21,7 @@ export const getAssetById = async (req: Request, res: Response, next: NextFuncti
 
 export const createAsset = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const asset = await assetService.createAsset(req.body);
+        const asset = await assetService.createAsset(req.body, req.user?.companyId);
         res.status(201).json({ status: 'success', data: asset });
     } catch (error) {
         next(error);
@@ -30,7 +30,7 @@ export const createAsset = async (req: Request, res: Response, next: NextFunctio
 
 export const updateAsset = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const asset = await assetService.updateAsset(req.params.id, req.body);
+        const asset = await assetService.updateAsset(req.params.id, req.body, req.user?.companyId);
         res.status(200).json({ status: 'success', data: asset });
     } catch (error) {
         next(error);
@@ -39,7 +39,7 @@ export const updateAsset = async (req: Request, res: Response, next: NextFunctio
 
 export const updateAssetState = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const asset = await assetService.updateAssetState(req.params.id, req.body);
+        const asset = await assetService.updateAssetState(req.params.id, req.body, req.user?.companyId);
         res.status(200).json({ status: 'success', data: asset });
     } catch (error) {
         next(error);
@@ -48,7 +48,7 @@ export const updateAssetState = async (req: Request, res: Response, next: NextFu
 
 export const deleteAsset = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        await assetService.deleteAsset(req.params.id);
+        await assetService.deleteAsset(req.params.id, req.user?.companyId);
         res.status(200).json({ status: 'success', message: 'Asset deleted' });
     } catch (error) {
         next(error);

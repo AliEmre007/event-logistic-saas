@@ -1,8 +1,11 @@
 import { prisma } from '../lib/prisma';
-import { NotFoundError } from '../utils/errors';
+import { NotFoundError, BadRequestError } from '../utils/errors';
 
-export const getAllUsers = async () => {
-    return await prisma.user.findMany({
+const companyScope = (companyId?: string | null) => (companyId ? { companyId } : {});
+
+export const getAllUsers = async (companyId?: string | null) => {
+    return prisma.user.findMany({
+        where: companyScope(companyId),
         select: {
             id: true,
             email: true,
@@ -10,6 +13,13 @@ export const getAllUsers = async () => {
             lastName: true,
             role: true,
             phone: true,
+            companyId: true,
+            company: {
+                select: {
+                    id: true,
+                    name: true,
+                },
+            },
             createdAt: true,
             performerProfile: {
                 select: { id: true, active: true },
@@ -19,9 +29,12 @@ export const getAllUsers = async () => {
     });
 };
 
-export const getUserById = async (id: string) => {
-    const user = await prisma.user.findUnique({
-        where: { id },
+export const getUserById = async (id: string, companyId?: string | null) => {
+    const user = await prisma.user.findFirst({
+        where: {
+            id,
+            ...companyScope(companyId),
+        },
         select: {
             id: true,
             email: true,
@@ -29,6 +42,13 @@ export const getUserById = async (id: string) => {
             lastName: true,
             role: true,
             phone: true,
+            companyId: true,
+            company: {
+                select: {
+                    id: true,
+                    name: true,
+                },
+            },
             createdAt: true,
             performerProfile: true,
         },
@@ -38,11 +58,39 @@ export const getUserById = async (id: string) => {
     return user;
 };
 
-export const updateUser = async (id: string, data: { firstName?: string; lastName?: string; phone?: string; role?: 'ADMIN' | 'PERFORMER' }) => {
-    const user = await prisma.user.findUnique({ where: { id } });
+export const updateUser = async (
+    id: string,
+    data: { firstName?: string; lastName?: string; phone?: string; role?: 'ADMIN' | 'PERFORMER' },
+    actorId: string,
+    companyId?: string | null
+) => {
+    const user = await prisma.user.findFirst({
+        where: {
+            id,
+            ...companyScope(companyId),
+        },
+    });
+
     if (!user) throw new NotFoundError('User not found');
 
-    return await prisma.user.update({
+    if (id === actorId && data.role && data.role !== user.role) {
+        throw new BadRequestError('You cannot change your own role');
+    }
+
+    if (user.role === 'ADMIN' && data.role && data.role !== 'ADMIN') {
+        const adminCount = await prisma.user.count({
+            where: {
+                role: 'ADMIN',
+                ...companyScope(companyId),
+            },
+        });
+
+        if (adminCount <= 1) {
+            throw new BadRequestError('Cannot demote the last admin in the company');
+        }
+    }
+
+    return prisma.user.update({
         where: { id },
         data,
         select: {
@@ -52,16 +100,43 @@ export const updateUser = async (id: string, data: { firstName?: string; lastNam
             lastName: true,
             role: true,
             phone: true,
+            companyId: true,
+            company: {
+                select: {
+                    id: true,
+                    name: true,
+                },
+            },
         },
     });
 };
 
-export const deleteUser = async (id: string) => {
-    const user = await prisma.user.findUnique({ where: { id } });
+export const deleteUser = async (id: string, actorId: string, companyId?: string | null) => {
+    if (id === actorId) {
+        throw new BadRequestError('You cannot delete your own account');
+    }
+
+    const user = await prisma.user.findFirst({
+        where: {
+            id,
+            ...companyScope(companyId),
+        },
+    });
+
     if (!user) throw new NotFoundError('User not found');
 
-    // Prevent deleting the last admin or yourself could be handled here if needed
-    // For now, let's just implement basic delete
+    if (user.role === 'ADMIN') {
+        const adminCount = await prisma.user.count({
+            where: {
+                role: 'ADMIN',
+                ...companyScope(companyId),
+            },
+        });
+
+        if (adminCount <= 1) {
+            throw new BadRequestError('Cannot delete the last admin in the company');
+        }
+    }
 
     await prisma.user.delete({ where: { id } });
 };

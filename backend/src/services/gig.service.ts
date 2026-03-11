@@ -2,20 +2,74 @@ import { prisma } from '../lib/prisma';
 import { BadRequestError, ConflictError, NotFoundError } from '../utils/errors';
 import { CreateGigInput, UpdateGigInput, AssignPerformerInput, AssignAssetInput } from '../schema/gig.schema';
 
-export const getAllGigs = async () => {
-    return await prisma.gig.findMany({
-        include: {
-            client: true,
-            location: true,
-            assignments: { include: { performer: { include: { user: true } } } },
-            assets: { include: { asset: true } },
+type GigAccessContext = {
+    userId: string;
+    role: string;
+    companyId?: string | null;
+};
+
+const companyScope = (companyId?: string | null) => (companyId ? { companyId } : {});
+
+const gigInclude = {
+    client: true,
+    location: true,
+    assignments: { include: { performer: { include: { user: true } } } },
+    assets: { include: { asset: true } },
+};
+
+const getPerformerProfileIdForUser = async (userId: string, companyId?: string | null) => {
+    const profile = await prisma.performerProfile.findFirst({
+        where: {
+            userId,
+            ...(companyId ? { user: { companyId } } : {}),
         },
+        select: { id: true },
+    });
+
+    return profile?.id;
+};
+
+const getAdminGigById = async (id: string, companyId?: string | null) => {
+    const gig = await prisma.gig.findFirst({
+        where: {
+            id,
+            ...companyScope(companyId),
+        },
+        include: gigInclude,
+    });
+
+    if (!gig) throw new NotFoundError('Gig not found');
+    return gig;
+};
+
+export const getAllGigs = async (ctx: GigAccessContext) => {
+    if (ctx.role === 'ADMIN') {
+        return prisma.gig.findMany({
+            where: companyScope(ctx.companyId),
+            include: gigInclude,
+            orderBy: { startTime: 'asc' },
+        });
+    }
+
+    const performerProfileId = await getPerformerProfileIdForUser(ctx.userId, ctx.companyId);
+    if (!performerProfileId) return [];
+
+    return prisma.gig.findMany({
+        where: {
+            ...companyScope(ctx.companyId),
+            assignments: {
+                some: {
+                    performerProfileId,
+                },
+            },
+        },
+        include: gigInclude,
         orderBy: { startTime: 'asc' },
     });
 };
 
-export const createGig = async (data: CreateGigInput) => {
-    return await prisma.gig.create({
+export const createGig = async (data: CreateGigInput, companyId?: string | null) => {
+    return prisma.gig.create({
         data: {
             title: data.title,
             description: data.description,
@@ -23,19 +77,30 @@ export const createGig = async (data: CreateGigInput) => {
             endTime: new Date(data.endTime),
             clientId: data.clientId,
             locationId: data.locationId,
+            companyId: companyId || undefined,
         },
     });
 };
 
-export const getGigById = async (id: string) => {
-    const gig = await prisma.gig.findUnique({
-        where: { id },
-        include: {
-            client: true,
-            location: true,
-            assignments: { include: { performer: { include: { user: true } } } },
-            assets: { include: { asset: true } },
+export const getGigById = async (id: string, ctx: GigAccessContext) => {
+    if (ctx.role === 'ADMIN') {
+        return getAdminGigById(id, ctx.companyId);
+    }
+
+    const performerProfileId = await getPerformerProfileIdForUser(ctx.userId, ctx.companyId);
+    if (!performerProfileId) throw new NotFoundError('Gig not found');
+
+    const gig = await prisma.gig.findFirst({
+        where: {
+            id,
+            ...companyScope(ctx.companyId),
+            assignments: {
+                some: {
+                    performerProfileId,
+                },
+            },
         },
+        include: gigInclude,
     });
 
     if (!gig) throw new NotFoundError('Gig not found');
@@ -44,8 +109,20 @@ export const getGigById = async (id: string) => {
 
 // --- CRITICAL: Conflict Prevention Logic ---
 
-export const assignPerformer = async (gigId: string, data: AssignPerformerInput) => {
-    const gig = await getGigById(gigId);
+export const assignPerformer = async (gigId: string, data: AssignPerformerInput, companyId?: string | null) => {
+    const gig = await getAdminGigById(gigId, companyId);
+
+    const performer = await prisma.performerProfile.findFirst({
+        where: {
+            id: data.performerProfileId,
+            ...(companyId ? { user: { companyId } } : {}),
+        },
+        select: { id: true },
+    });
+
+    if (!performer) {
+        throw new BadRequestError('Performer does not belong to this company');
+    }
 
     // Check for time overlap for this performer
     const overlappingAssignments = await prisma.gigAssignment.findMany({
@@ -56,6 +133,7 @@ export const assignPerformer = async (gigId: string, data: AssignPerformerInput)
                     { startTime: { lt: gig.endTime } },
                     { endTime: { gt: gig.startTime } },
                 ],
+                ...companyScope(companyId),
             },
         },
     });
@@ -80,11 +158,16 @@ export const assignPerformer = async (gigId: string, data: AssignPerformerInput)
     }
 };
 
-export const assignAsset = async (gigId: string, data: AssignAssetInput) => {
-    const gig = await getGigById(gigId);
+export const assignAsset = async (gigId: string, data: AssignAssetInput, companyId?: string | null) => {
+    const gig = await getAdminGigById(gigId, companyId);
 
-    // Check if asset is out of service or in maintenance
-    const asset = await prisma.asset.findUnique({ where: { id: data.assetId } });
+    // Check if asset exists in scope and if it can be assigned
+    const asset = await prisma.asset.findFirst({
+        where: {
+            id: data.assetId,
+            ...companyScope(companyId),
+        },
+    });
     if (!asset) throw new NotFoundError('Asset not found');
 
     if (['MAINTENANCE_CLEANING', 'OUT_OF_SERVICE'].includes(asset.state)) {
@@ -100,6 +183,7 @@ export const assignAsset = async (gigId: string, data: AssignAssetInput) => {
                     { startTime: { lt: gig.endTime } },
                     { endTime: { gt: gig.startTime } },
                 ],
+                ...companyScope(companyId),
             },
         },
     });
@@ -124,8 +208,8 @@ export const assignAsset = async (gigId: string, data: AssignAssetInput) => {
     }
 };
 
-export const updateGig = async (id: string, data: UpdateGigInput) => {
-    await getGigById(id); // Ensure exists
+export const updateGig = async (id: string, data: UpdateGigInput, companyId?: string | null) => {
+    await getAdminGigById(id, companyId); // Ensure exists in scope
 
     const updateData: Record<string, unknown> = {};
     if (data.title !== undefined) updateData.title = data.title;
@@ -136,25 +220,22 @@ export const updateGig = async (id: string, data: UpdateGigInput) => {
     if (data.locationId !== undefined) updateData.locationId = data.locationId;
     if (data.status !== undefined) updateData.status = data.status;
 
-    return await prisma.gig.update({
+    return prisma.gig.update({
         where: { id },
         data: updateData,
-        include: {
-            client: true,
-            location: true,
-            assignments: { include: { performer: { include: { user: true } } } },
-            assets: { include: { asset: true } },
-        },
+        include: gigInclude,
     });
 };
 
-export const deleteGig = async (id: string) => {
-    await getGigById(id); // Ensure exists
+export const deleteGig = async (id: string, companyId?: string | null) => {
+    await getAdminGigById(id, companyId); // Ensure exists in scope
     // Cascade deletes assignments and assets via schema onDelete: Cascade
     await prisma.gig.delete({ where: { id } });
 };
 
-export const removePerformerAssignment = async (gigId: string, assignmentId: string) => {
+export const removePerformerAssignment = async (gigId: string, assignmentId: string, companyId?: string | null) => {
+    await getAdminGigById(gigId, companyId);
+
     const assignment = await prisma.gigAssignment.findFirst({
         where: { id: assignmentId, gigId },
     });
@@ -162,7 +243,9 @@ export const removePerformerAssignment = async (gigId: string, assignmentId: str
     await prisma.gigAssignment.delete({ where: { id: assignmentId } });
 };
 
-export const removeAssetAssignment = async (gigId: string, gigAssetId: string) => {
+export const removeAssetAssignment = async (gigId: string, gigAssetId: string, companyId?: string | null) => {
+    await getAdminGigById(gigId, companyId);
+
     const gigAsset = await prisma.gigAsset.findFirst({
         where: { id: gigAssetId, gigId },
     });

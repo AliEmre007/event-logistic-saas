@@ -10,10 +10,13 @@ const router = Router();
 router.use(authenticate);
 router.use(authorizeRole('ADMIN'));
 
+const getCompanyScope = (req: Request) => (req.user?.companyId ? { companyId: req.user.companyId } : {});
+
 // GET all clients
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
         const clients = await prisma.client.findMany({
+            where: getCompanyScope(req),
             orderBy: { name: 'asc' },
             include: { _count: { select: { gigs: true, invoices: true } } },
         });
@@ -26,8 +29,11 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 // GET client by ID
 router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const client = await prisma.client.findUnique({
-            where: { id: req.params.id },
+        const client = await prisma.client.findFirst({
+            where: {
+                id: req.params.id,
+                ...getCompanyScope(req),
+            },
             include: {
                 gigs: { orderBy: { startTime: 'desc' }, take: 10 },
                 invoices: { orderBy: { issuedAt: 'desc' }, take: 10 },
@@ -43,7 +49,12 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
 // POST create client
 router.post('/', validateRequest(createClientSchema), async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const client = await prisma.client.create({ data: req.body });
+        const client = await prisma.client.create({
+            data: {
+                ...req.body,
+                companyId: req.user?.companyId || undefined,
+            },
+        });
         res.status(201).json({ status: 'success', data: client });
     } catch (error) {
         next(error);
@@ -53,6 +64,18 @@ router.post('/', validateRequest(createClientSchema), async (req: Request, res: 
 // PUT update client
 router.put('/:id', validateRequest(updateClientSchema), async (req: Request, res: Response, next: NextFunction) => {
     try {
+        const existing = await prisma.client.findFirst({
+            where: {
+                id: req.params.id,
+                ...getCompanyScope(req),
+            },
+            select: { id: true },
+        });
+
+        if (!existing) {
+            return res.status(404).json({ status: 'error', message: 'Client not found' });
+        }
+
         const client = await prisma.client.update({
             where: { id: req.params.id },
             data: req.body,
@@ -66,8 +89,25 @@ router.put('/:id', validateRequest(updateClientSchema), async (req: Request, res
 // DELETE client
 router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
     try {
+        const existing = await prisma.client.findFirst({
+            where: {
+                id: req.params.id,
+                ...getCompanyScope(req),
+            },
+            select: { id: true },
+        });
+
+        if (!existing) {
+            return res.status(404).json({ status: 'error', message: 'Client not found' });
+        }
+
         // Check for existing gigs
-        const gigCount = await prisma.gig.count({ where: { clientId: req.params.id } });
+        const gigCount = await prisma.gig.count({
+            where: {
+                clientId: req.params.id,
+                ...getCompanyScope(req),
+            },
+        });
         if (gigCount > 0) {
             return res.status(409).json({
                 status: 'error',
